@@ -1,0 +1,13 @@
+# Secrets: .env and any backup/variant (.env.bak, .env.local...), except the template
+.env*
+!.env.example
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+state/

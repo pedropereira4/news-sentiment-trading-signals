@@ -1,0 +1,15 @@
+# RSS feeds polled by the producer. `source` becomes the Kafka message key
+# (per-source ordering) and an InfluxDB tag.
+feeds:
+  - source: bbc_world
+    url: https://feeds.bbci.co.uk/news/world/rss.xml
+  - source: bbc_business
+    url: https://feeds.bbci.co.uk/news/business/rss.xml
+  - source: bbc_technology
+    url: https://feeds.bbci.co.uk/news/technology/rss.xml
+  - source: guardian_world
+    url: https://www.theguardian.com/world/rss
+  - source: npr_news
+    url: https://feeds.npr.org/1001/rss.xml
+  - source: hackernews
+    url: https://hnrss.org/frontpage
