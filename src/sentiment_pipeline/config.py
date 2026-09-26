@@ -36,7 +36,9 @@ class FinnhubSettings(KafkaSettings):
     finnhub_poll_interval_seconds: int = Field(default=120, ge=30)
     finnhub_min_request_interval_seconds: float = Field(default=1.1, ge=0)
     # Finnhub filters by calendar day; on each cycle we ask for [today - lookback, today].
-    finnhub_lookback_days: int = Field(default=1, ge=0, le=30)
+    # 7 days means the machine can be off for most of a week without missing news
+    # (already-seen stories are skipped, so a longer window costs no extra LLM calls).
+    finnhub_lookback_days: int = Field(default=7, ge=0, le=30)
     finnhub_state_file: str = "state/finnhub_seen_ids.json"
     finnhub_seen_cache_size: int = 20_000
     http_timeout_seconds: float = 15.0

@@ -17,6 +17,7 @@ services:
   kafka:
     image: apache/kafka:3.8.0
     container_name: kafka
+    restart: unless-stopped
     ports:
       - "29092:29092"   # host access: localhost:29092
     environment:
@@ -75,6 +76,7 @@ services:
   influxdb:
     image: influxdb:2.7
     container_name: influxdb
+    restart: unless-stopped
     ports:
       - "8086:8086"
     environment:
@@ -98,6 +100,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: postgres
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -115,6 +118,7 @@ services:
   grafana:
     image: grafana/grafana:11.2.0
     container_name: grafana
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:

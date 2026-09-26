@@ -313,7 +313,7 @@ All settings are environment variables (see `.env.example`), loaded with `pydant
 | `FINNHUB_API_KEY` | – | Finnhub key for company news |
 | `WATCHLIST_FILE` | `/app/config/watchlist.yaml` | Tickers, company name, group (`large_cap` / `small_mid_cap`) and sector; the enricher keeps signals only for these |
 | `FINNHUB_POLL_INTERVAL_SECONDS` | `120` | One request per ticker per cycle |
-| `FINNHUB_LOOKBACK_DAYS` | `1` | Calendar days requested per cycle |
+| `FINNHUB_LOOKBACK_DAYS` | `7` | Calendar days requested per cycle (the machine can be off for most of a week without missing news) |
 | `INFLUXDB_*` | – | Connection and bootstrap settings |
 | `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` | – | Alpaca keys (paper-trading keys work) |
 | `ALPACA_DATA_FEED` | `sip` | `sip` (all exchanges, delayed on free plan) or `iex` |
@@ -340,6 +340,26 @@ the group towards exactly the coverage it is supposed to lack. A larger, rule-ba
 fixes both: more events, and no selection by the author. A test checks that the committed
 `watchlist.yaml` is exactly what the script generates. `SPY` is the benchmark for abnormal
 returns.
+
+### Study protocol (registered before any results)
+
+[`config/study.yaml`](config/study.yaml) fixes the hypothesis, data, stopping rule and
+analysis **before** the event study is run for the first time (2026-09-26):
+
+- **Hypothesis:** LLM news sentiment predicts abnormal returns vs `SPY`, more strongly for
+  less-covered companies (random S&P 600 sample) than for the most covered large caps.
+- **Data:** from 2026-09-28 (first market day with the final watchlist), Finnhub news only,
+  one LLM model throughout, source timestamps only.
+- **Stopping rule:** 300 small-cap signals or 2026-10-30 (5 weeks), whichever comes first. The rule is
+  based on sample size and time, never on the results.
+- **Primary analysis:** 1-day abnormal return regressed on signal score with a
+  score × group interaction; 5-minute, 1-hour and 5-day horizons are secondary (small caps
+  often have no trade in a given minute, so the price at time *t* is the last trade at or
+  before *t*).
+
+Any later change goes into `amendments` with a date and a reason, and is reported with the
+results. Stopping when the numbers look good, or reporting whichever horizon "worked", are
+the usual ways a backtest finds an effect that is not there.
 
 ---
 

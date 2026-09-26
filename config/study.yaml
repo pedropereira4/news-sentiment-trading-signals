@@ -1,0 +1,38 @@
+# Study protocol - fixed on 2026-09-26, BEFORE any event-study result was computed.
+#
+# Changing anything below after results have been seen invalidates them (stopping when the
+# numbers look good, or picking the horizon that "worked", are the classic ways to find an
+# effect that is not there). If something must change, add an entry to `amendments` with the
+# date and the reason, and report it with the results.
+
+registered_on: 2026-09-26
+
+hypothesis: >
+  LLM news sentiment predicts abnormal returns (vs SPY) after publication, and the effect is
+  larger for less-covered companies (random S&P SmallCap 600 sample) than for the most covered
+  large caps.
+
+data:
+  collection_start: 2026-09-28        # first market day with the final 40-ticker watchlist
+  watchlist: config/watchlist.yaml    # 10 large caps + 30 small caps (seed 20260926)
+  news_source: finnhub                # RSS items are excluded from the analysis
+  llm_model: google/gemini-3.1-flash-lite   # one model for the whole collection
+  benchmark: SPY
+  price_feed: sip                     # 1-minute bars from Alpaca
+  timestamps: feed_only               # signals with timestamp_source = 'ingested' are excluded
+
+stopping_rule:                        # whichever comes first; not based on results
+  min_small_cap_signals: 300          # all signals for small_mid_cap tickers, any strength
+  max_end_date: 2026-10-30            # 5 weeks (~23 market days)
+
+analysis:
+  horizons: [5min, 1h, 1d, 5d]
+  primary_horizon: 1d                 # small caps trade too thinly for 5-minute prices
+  price_at_time_t: last_trade_at_or_before   # minutes without trades have no bar
+  abnormal_return: ticker_return_minus_spy_return
+  primary_test: >
+    Regression of the 1-day abnormal return on the signal score, with a score x cap_group
+    interaction; the interaction coefficient answers the hypothesis.
+  strong_signal: {min_abs_score: 0.6, is_new_info: true, exclude_event_types: [commentary]}
+
+amendments: []
