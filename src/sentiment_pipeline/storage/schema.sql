@@ -62,3 +62,20 @@ SELECT
 FROM ticker_signals s
 JOIN articles a ON a.id = s.article_id
 LEFT JOIN tickers t ON t.ticker = s.ticker;
+
+-- 1-minute OHLCV bars for the watchlist and the benchmark (Alpaca market data).
+-- `ts` is the start of the minute (UTC). Extended-hours bars are kept; the event study
+-- decides which session to use.
+CREATE TABLE IF NOT EXISTS price_bars (
+    ticker       text NOT NULL,
+    ts           timestamptz NOT NULL,
+    open         double precision NOT NULL,
+    high         double precision NOT NULL,
+    low          double precision NOT NULL,
+    close        double precision NOT NULL,
+    volume       bigint NOT NULL,
+    trade_count  integer,
+    vwap         double precision,
+    feed         text NOT NULL,
+    PRIMARY KEY (ticker, ts)
+);

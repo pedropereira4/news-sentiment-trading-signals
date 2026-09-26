@@ -186,6 +186,20 @@ services:
       postgres:
         condition: service_healthy
 
+  # Alpaca 1-minute bars for the watchlist + SPY -> PostgreSQL (price_bars). No Kafka needed.
+  price-ingestor:
+    <<: *app
+    container_name: price-ingestor
+    command: ["sp-price-ingestor"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-sentiment}
+      POSTGRES_USER: ${POSTGRES_USER:-sentiment}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-please}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   influxdb-data:

@@ -36,10 +36,15 @@ log = logging.getLogger("postgres-writer")
 
 
 def connect(conninfo: str, attempts: int = 10, delay_s: float = 3.0) -> psycopg.Connection:
-    """Postgres can take a few seconds to accept connections after a cold start."""
+    """Postgres can take a few seconds to accept connections after a cold start.
+
+    autocommit=True is deliberate: every write goes through an explicit
+    `with conn.transaction()` block. Without autocommit, the first plain SELECT would open
+    an implicit transaction and those blocks would become savepoints that never commit.
+    """
     for attempt in range(1, attempts + 1):
         try:
-            return psycopg.connect(conninfo)
+            return psycopg.connect(conninfo, autocommit=True)
         except psycopg.OperationalError as exc:
             if attempt == attempts:
                 raise

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -121,7 +121,7 @@ class PostgresSettings(_Base):
             dbname=self.postgres_db,
             user=self.postgres_user,
             password=self.postgres_password,
-            application_name="postgres-writer",
+            application_name="sentiment-pipeline",
         )
 
 
@@ -129,3 +129,25 @@ class PostgresWriterSettings(KafkaSettings, PostgresSettings):
     consumer_group: str = "postgres-writer"
     postgres_writer_batch_size: int = Field(default=200, ge=1)
     watchlist_file: str = "config/watchlist.yaml"
+
+
+class PriceIngestorSettings(PostgresSettings):
+    # Accepts the names used in .env here and the official Alpaca SDK names.
+    alpaca_api_key: str = Field(
+        default="", validation_alias=AliasChoices("ALPACA_API_KEY", "APCA_API_KEY_ID")
+    )
+    alpaca_secret_key: str = Field(
+        default="", validation_alias=AliasChoices("ALPACA_SECRET_KEY", "APCA_API_SECRET_KEY")
+    )
+    # "sip" = all US exchanges (free plan: ~15 min delay); "iex" = one exchange, real time.
+    alpaca_data_feed: Literal["sip", "iex"] = "sip"
+    price_poll_interval_seconds: int = Field(default=900, ge=60)
+    price_backfill_days: int = Field(default=10, ge=1, le=365)
+    # SIP on the free plan is only served after ~15 minutes: stay behind that edge.
+    price_delay_minutes: int = Field(default=16, ge=0)
+    watchlist_file: str = "config/watchlist.yaml"
+
+    @field_validator("alpaca_api_key", "alpaca_secret_key", mode="before")
+    @classmethod
+    def _clean_keys(cls, v: str) -> str:
+        return v.strip().strip("\"'").strip() if isinstance(v, str) else v

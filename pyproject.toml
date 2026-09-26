@@ -29,6 +29,7 @@ sp-finnhub-producer = "sentiment_pipeline.producer.finnhub_producer:main"
 sp-enricher = "sentiment_pipeline.enricher.main:main"
 sp-writer = "sentiment_pipeline.writer.influx_writer:main"
 sp-postgres-writer = "sentiment_pipeline.writer.postgres_writer:main"
+sp-price-ingestor = "sentiment_pipeline.market.price_ingestor:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -46,6 +46,8 @@ flowchart LR
     PW["<b>postgres-writer</b><br/>upsert · transactional"]
     I[(InfluxDB<br/>30-day dashboards)]
     PG[(PostgreSQL<br/>system of record)]
+    AL[Alpaca market data<br/>1-min bars]:::src
+    PI["<b>price-ingestor</b><br/>incremental · backfill"]
     G[Grafana dashboard]
 
     FH --> F --> T1
@@ -53,6 +55,7 @@ flowchart LR
     E <--> LLM
     E --> T2 --> W --> I --> G
     T2 --> PW --> PG
+    AL --> PI --> PG
     E -. invalid / unclassifiable .-> T3
     W -. invalid .-> T3
 
@@ -66,6 +69,7 @@ flowchart LR
 | **enricher** | Consumes `news.raw` in batches, one LLM call per batch, validates JSON output, publishes `EnrichedArticle` | consumer group, up to #partitions |
 | **writer** | Consumes `news.enriched`, writes batched points to InfluxDB, commits offsets after the write | consumer group |
 | **postgres-writer** | Consumes `news.enriched` in its own consumer group, upserts articles and per-ticker signals into PostgreSQL in one transaction per batch, then commits offsets | consumer group |
+| **price-ingestor** | Every 15 min, fetches 1-minute bars from Alpaca for the watchlist and `SPY` after the last stored bar; backfills new tickers separately; upserts into `price_bars` | one instance |
 | **kafka-init** | Creates topics with explicit partitions (auto-creation is disabled) | – |
 
 Each stage is an independent consumer group, so the LLM step can be scaled, swapped or
@@ -165,6 +169,7 @@ by the writer on startup.
 | `tickers` | one per watchlist ticker (synced from `watchlist.yaml`) | `cap_group`, `sector` |
 | `articles` | one per news item | `published_at`, `timestamp_source`, article-level sentiment, `llm_model` |
 | `ticker_signals` | one per (article, company) | `ticker`, `published_at`, `score`, `event_type`, `is_new_info` |
+| `price_bars` | one per (ticker, minute), watchlist + `SPY` | OHLCV, `vwap`, `trade_count`, `feed` |
 | `v_signals` (view) | signals joined with article and ticker group/sector | – |
 
 Writes are idempotent: articles are upserted by id and their signals replaced inside the same
@@ -179,6 +184,11 @@ FROM v_signals
 WHERE feed_timestamp AND is_new_info AND abs(score) >= 0.6
 GROUP BY 1, 2 ORDER BY n DESC;
 ```
+
+Prices come from Alpaca's `sip` feed (every US exchange, so real volume) when the plan allows
+it: on the free plan SIP is served with a ~15-minute delay, so the ingestor always stays
+16 minutes behind. That is irrelevant for an event study run after the fact. If the account
+cannot use SIP at all it falls back to `iex` and records the feed on every bar.
 
 `topic_mention` has one point per (article, topic), which makes "top topics" and
 "average sentiment per topic" simple aggregations. `ticker_signal` has one point per
@@ -305,6 +315,9 @@ All settings are environment variables (see `.env.example`), loaded with `pydant
 | `FINNHUB_POLL_INTERVAL_SECONDS` | `120` | One request per ticker per cycle |
 | `FINNHUB_LOOKBACK_DAYS` | `1` | Calendar days requested per cycle |
 | `INFLUXDB_*` | – | Connection and bootstrap settings |
+| `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` | – | Alpaca keys (paper-trading keys work) |
+| `ALPACA_DATA_FEED` | `sip` | `sip` (all exchanges, delayed on free plan) or `iex` |
+| `PRICE_POLL_INTERVAL_SECONDS` / `PRICE_BACKFILL_DAYS` | `900` / `10` | Price polling and initial history |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `sentiment` / `sentiment` / – | PostgreSQL database and credentials |
 
 Add or remove sources in [`config/feeds.yaml`](config/feeds.yaml) and restart the producer.
@@ -350,6 +363,9 @@ returns.
 │   ├── llm/
 │   │   ├── prompt.py           # prompt + defensive JSON parsing
 │   │   └── clients.py          # Ollama / OpenRouter / Anthropic / Mock
+│   ├── market/
+│   │   ├── alpaca.py           # bars client: pagination, retries, sip -> iex fallback
+│   │   └── price_ingestor.py   # incremental 1-min bars -> price_bars
 │   ├── storage/
 │   │   ├── schema.sql          # tables, indexes, v_signals view
 │   │   └── postgres.py         # idempotent transactional batch writes

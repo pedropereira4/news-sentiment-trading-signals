@@ -8,11 +8,13 @@ re-enriching with another model, therefore overwrites rows instead of duplicatin
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 from importlib.resources import files
 from typing import Any
 
 import psycopg
 
+from sentiment_pipeline.market.alpaca import Bar
 from sentiment_pipeline.schemas import EnrichedArticle
 from sentiment_pipeline.watchlist import Watchlist
 
@@ -121,3 +123,29 @@ def write_batch(conn: psycopg.Connection, articles: Sequence[EnrichedArticle]) -
         if signals:
             cur.executemany(_INSERT_SIGNAL, signals)
     return len(batch), len(signals)
+
+
+_UPSERT_BAR = (
+    "INSERT INTO price_bars (ticker, ts, open, high, low, close, volume, trade_count, vwap, feed) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+    "ON CONFLICT (ticker, ts) DO UPDATE SET open = EXCLUDED.open, high = EXCLUDED.high, "
+    "low = EXCLUDED.low, close = EXCLUDED.close, volume = EXCLUDED.volume, "
+    "trade_count = EXCLUDED.trade_count, vwap = EXCLUDED.vwap, feed = EXCLUDED.feed"
+)
+
+
+def upsert_bars(conn: psycopg.Connection, bars: Sequence[Bar]) -> int:
+    """Idempotent: re-downloading an overlapping window overwrites the same rows."""
+    if not bars:
+        return 0
+    rows = [
+        (b.ticker, b.ts, b.open, b.high, b.low, b.close, b.volume, b.trade_count, b.vwap, b.feed)
+        for b in bars
+    ]
+    with conn.transaction(), conn.cursor() as cur:
+        cur.executemany(_UPSERT_BAR, rows)
+    return len(rows)
+
+
+def last_bar_times(conn: psycopg.Connection) -> dict[str, datetime]:
+    return dict(conn.execute("SELECT ticker, max(ts) FROM price_bars GROUP BY ticker").fetchall())
