@@ -32,7 +32,7 @@ class ProducerSettings(KafkaSettings):
 class FinnhubSettings(KafkaSettings):
     finnhub_api_key: str = ""
     watchlist_file: str = "config/watchlist.yaml"
-    # Free tier allows ~60 requests/min: 20 tickers every 2 min is ~10/min.
+    # Free tier allows ~60 requests/min: 40 tickers every 2 min is ~20/min.
     finnhub_poll_interval_seconds: int = Field(default=120, ge=30)
     finnhub_min_request_interval_seconds: float = Field(default=1.1, ge=0)
     # Finnhub filters by calendar day; on each cycle we ask for [today - lookback, today].

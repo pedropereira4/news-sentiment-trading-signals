@@ -58,9 +58,16 @@ def ensure_schema(conn: psycopg.Connection) -> None:
 
 
 def sync_tickers(conn: psycopg.Connection, watchlist: Watchlist) -> int:
+    """Make the tickers table mirror the watchlist.
+
+    Tickers removed from the watchlist are deleted here; their past signals stay in
+    ticker_signals but lose their group in v_signals (cap_group IS NULL), so they drop
+    out of any group comparison instead of silently mixing old and new universes.
+    """
     rows = [(e.ticker, e.name, e.group, e.sector) for e in watchlist.tickers]
     with conn.transaction(), conn.cursor() as cur:
         cur.executemany(_UPSERT_TICKER, rows)
+        cur.execute("DELETE FROM tickers WHERE NOT (ticker = ANY(%s))", ([r[0] for r in rows],))
     return len(rows)
 
 

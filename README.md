@@ -28,7 +28,7 @@ queue, retries with backoff, tests and CI. The whole stack starts with one comma
 ```mermaid
 flowchart LR
     subgraph Sources
-        FH[Finnhub company news<br/>20-ticker watchlist]:::src
+        FH[Finnhub company news<br/>40-ticker watchlist]:::src
         RSS1[BBC]:::src
         RSS2[Guardian / NPR / HN ...]:::src
     end
@@ -311,11 +311,22 @@ Add or remove sources in [`config/feeds.yaml`](config/feeds.yaml) and restart th
 
 ### Watchlist
 
-[`config/watchlist.yaml`](config/watchlist.yaml) holds 20 tickers split into two groups
-matched by sector: 10 large caps (the control group) and 10 small/mid caps. The design
-question is whether news sentiment carries more information for companies that fewer analysts
-and algorithms follow, so the group is recorded with every ticker. `SPY` is the benchmark for
-abnormal returns.
+[`config/watchlist.yaml`](config/watchlist.yaml) holds 40 tickers in two groups over the same
+six sectors (technology, communication, consumer, financials, healthcare, energy):
+
+- **`large_cap` (10):** the most covered companies in each sector - the control group.
+- **`small_mid_cap` (30):** a **random sample, 5 per sector, from the S&P SmallCap 600**,
+  drawn by [`scripts/build_watchlist.py`](scripts/build_watchlist.py) from a committed
+  constituent snapshot ([`data/`](data/)) with a fixed seed.
+
+The design question is whether news sentiment carries more information for companies that
+fewer analysts and algorithms follow. The first version used 10 hand-picked small caps, and
+the first two days of data showed two problems: they produced only 4% of all signals (5
+strong ones), and hand-picking tends to select famous, heavily covered names, which biases
+the group towards exactly the coverage it is supposed to lack. A larger, rule-based sample
+fixes both: more events, and no selection by the author. A test checks that the committed
+`watchlist.yaml` is exactly what the script generates. `SPY` is the benchmark for abnormal
+returns.
 
 ---
 
@@ -350,6 +361,8 @@ abnormal returns.
 │   ├── provisioning/           # datasource + dashboard provider
 │   └── dashboards/news-sentiment.json
 ├── scripts/build_dashboard.py  # dashboard as code
+├── scripts/build_watchlist.py  # rule-based small-cap sample (seeded)
+├── data/                       # S&P SmallCap 600 constituent snapshot
 ├── tests/                      # pytest unit tests
 └── .github/workflows/ci.yml    # lint, tests, compose validation
 ```

@@ -157,11 +157,32 @@ def test_failed_batch_leaves_nothing_behind(conn):
 @needs_pg
 def test_view_joins_signals_with_watchlist_groups(conn):
     sync_tickers(conn, load_watchlist(str(ROOT / "config" / "watchlist.yaml")))
-    write_batch(conn, [enriched(signals=[signal("NVDA"), signal("IONQ", -0.5, "product")])])
+    write_batch(conn, [enriched(signals=[signal("NVDA"), signal("IRDM", -0.5, "product")])])
     rows = conn.execute(
         "SELECT ticker, cap_group, sector, publisher FROM v_signals ORDER BY ticker"
     ).fetchall()
     assert rows == [
-        ("IONQ", "small_mid_cap", "technology", "Reuters"),
+        ("IRDM", "small_mid_cap", "communication", "Reuters"),
         ("NVDA", "large_cap", "technology", "Reuters"),
     ]
+
+
+@needs_pg
+def test_tickers_removed_from_the_watchlist_drop_out_of_group_analysis(conn):
+    from sentiment_pipeline.watchlist import Watchlist
+
+    old = Watchlist.model_validate(
+        {
+            "tickers": [
+                {"ticker": "NVDA", "group": "large_cap", "sector": "technology"},
+                {"ticker": "IONQ", "group": "small_mid_cap", "sector": "technology"},
+            ]
+        }
+    )
+    sync_tickers(conn, old)
+    write_batch(conn, [enriched(signals=[signal("NVDA"), signal("IONQ")])])
+    sync_tickers(conn, load_watchlist(str(ROOT / "config" / "watchlist.yaml")))  # IONQ removed
+
+    assert conn.execute("SELECT count(*) FROM tickers WHERE ticker = 'IONQ'").fetchone()[0] == 0
+    groups = dict(conn.execute("SELECT ticker, cap_group FROM v_signals").fetchall())
+    assert groups == {"NVDA": "large_cap", "IONQ": None}  # history kept, but ungrouped

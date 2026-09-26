@@ -121,14 +121,13 @@ def test_client_rejects_error_payloads():
 
 
 # ---------------------------------------------------------------- watchlist
-def test_repo_watchlist_is_balanced_between_groups():
+def test_repo_watchlist_matches_the_study_design():
     wl = load_watchlist(str(ROOT / "config" / "watchlist.yaml"))
     groups = [e.group for e in wl.tickers]
-    assert len(wl.symbols) == 20
-    assert groups.count("large_cap") == groups.count("small_mid_cap") == 10
+    assert groups.count("large_cap") == 10 and groups.count("small_mid_cap") == 30
     # Same sectors on both sides, so group effects are not sector effects.
     sectors = {g: {e.sector for e in wl.tickers if e.group == g} for g in set(groups)}
-    assert sectors["large_cap"] >= sectors["small_mid_cap"]
+    assert sectors["large_cap"] == sectors["small_mid_cap"]
 
 
 def test_watchlist_rejects_duplicates():
