@@ -8,10 +8,11 @@
 ![Grafana](https://img.shields.io/badge/Grafana-11-F46800)
 ![Docker](https://img.shields.io/badge/docker%20compose-ready-2496ED)
 
-This project ingests RSS feeds from major news outlets, streams every new headline through
-Apache Kafka, uses a Large Language Model to classify its **sentiment** (label + score) and
-extract **key topics**, stores the results in InfluxDB and visualises how the tone of the news
-evolves on a live Grafana dashboard.
+This project ingests company news for a watchlist of US stocks (Finnhub) and RSS feeds from
+major news outlets, streams every new item through Apache Kafka, uses a Large Language Model to
+classify its **sentiment**, extract **key topics** and produce **per-ticker signals** (direction,
+strength, event type, whether it is new information), stores the results in InfluxDB and
+visualises them on a live Grafana dashboard.
 
 It is built as a production-style, event-driven system rather than a notebook: typed message
 contracts, micro-batched LLM calls, at-least-once delivery with idempotent writes, a dead-letter
@@ -27,12 +28,13 @@ queue, retries with backoff, tests and CI. The whole stack starts with one comma
 ```mermaid
 flowchart LR
     subgraph Sources
+        FH[Finnhub company news<br/>20-ticker watchlist]:::src
         RSS1[BBC]:::src
-        RSS2[Guardian]:::src
-        RSS3[NPR / HN ...]:::src
+        RSS2[Guardian / NPR / HN ...]:::src
     end
 
-    P["<b>producer</b><br/>poll · normalise · dedupe"]
+    F["<b>finnhub-producer</b><br/>paced polling · merge per story"]
+    P["<b>producer</b><br/>RSS · normalise · dedupe"]
     subgraph Kafka["Apache Kafka (KRaft)"]
         T1[(news.raw)]
         T2[(news.enriched)]
@@ -41,12 +43,16 @@ flowchart LR
     E["<b>enricher</b><br/>micro-batch · LLM · validate"]
     LLM{{"LLM<br/>Ollama (local) /<br/>OpenRouter / Anthropic"}}
     W["<b>writer</b><br/>line protocol · idempotent"]
-    I[(InfluxDB)]
+    PW["<b>postgres-writer</b><br/>upsert · transactional"]
+    I[(InfluxDB<br/>30-day dashboards)]
+    PG[(PostgreSQL<br/>system of record)]
     G[Grafana dashboard]
 
-    RSS1 & RSS2 & RSS3 --> P --> T1 --> E
+    FH --> F --> T1
+    RSS1 & RSS2 --> P --> T1 --> E
     E <--> LLM
     E --> T2 --> W --> I --> G
+    T2 --> PW --> PG
     E -. invalid / unclassifiable .-> T3
     W -. invalid .-> T3
 
@@ -55,9 +61,11 @@ flowchart LR
 
 | Service | Responsibility | Scales by |
 |---|---|---|
+| **finnhub-producer** | Polls Finnhub company news for each watchlist ticker, merges copies of the same story returned for several tickers, paces requests under the free-tier limit | one instance (stateful poller) |
 | **producer** | Polls RSS feeds, builds `RawArticle`, drops duplicates (persistent LRU), publishes keyed by source | one instance (stateful poller) |
 | **enricher** | Consumes `news.raw` in batches, one LLM call per batch, validates JSON output, publishes `EnrichedArticle` | consumer group, up to #partitions |
 | **writer** | Consumes `news.enriched`, writes batched points to InfluxDB, commits offsets after the write | consumer group |
+| **postgres-writer** | Consumes `news.enriched` in its own consumer group, upserts articles and per-ticker signals into PostgreSQL in one transaction per batch, then commits offsets | consumer group |
 | **kafka-init** | Creates topics with explicit partitions (auto-creation is disabled) | – |
 
 Each stage is an independent consumer group, so the LLM step can be scaled, swapped or
@@ -145,6 +153,33 @@ reviewable in diffs.
 | `topic_mention` | `topic`, `source`, `sentiment` | `score`, `count` |
 | `ticker_signal` | `ticker`, `event_type`, `sentiment`, `source` | `score`, `confidence`, `is_new_info`, `feed_timestamp`, `title` |
 
+### PostgreSQL (system of record)
+
+InfluxDB keeps 30 days for the dashboards; PostgreSQL keeps everything, because the event
+study needs weeks to months of signals. The schema lives in
+[`storage/schema.sql`](src/sentiment_pipeline/storage/schema.sql) and is applied idempotently
+by the writer on startup.
+
+| Table | Grain | Key columns |
+|---|---|---|
+| `tickers` | one per watchlist ticker (synced from `watchlist.yaml`) | `cap_group`, `sector` |
+| `articles` | one per news item | `published_at`, `timestamp_source`, article-level sentiment, `llm_model` |
+| `ticker_signals` | one per (article, company) | `ticker`, `published_at`, `score`, `event_type`, `is_new_info` |
+| `v_signals` (view) | signals joined with article and ticker group/sector | – |
+
+Writes are idempotent: articles are upserted by id and their signals replaced inside the same
+transaction, so Kafka redelivery or a full replay with another model overwrites instead of
+duplicating, and a failed batch leaves nothing half-written. Because the writer is its own
+consumer group, a new deployment backfills everything still retained in `news.enriched`.
+
+```sql
+-- Strong, new-information signals per group and event type
+SELECT cap_group, event_type, count(*) AS n, round(avg(score)::numeric, 2) AS avg_score
+FROM v_signals
+WHERE feed_timestamp AND is_new_info AND abs(score) >= 0.6
+GROUP BY 1, 2 ORDER BY n DESC;
+```
+
 `topic_mention` has one point per (article, topic), which makes "top topics" and
 "average sentiment per topic" simple aggregations. `ticker_signal` has one point per
 (article, company): the per-stock view used downstream for trading signals.
@@ -159,6 +194,12 @@ direction and strength (`sentiment`, `score`, `confidence`), the kind of event
 management, capital, macro, commentary, other) and `is_new_info`, which separates new facts
 from recaps and opinion pieces. Malformed signals are dropped individually, so one bad
 ticker never discards the rest of the item. Messages written with schema v1 still parse.
+
+Signals are restricted to the watchlist: the prompt lists the companies of interest (ticker
+and name, so "Nvidia" maps to `NVDA`), and anything else the model returns is dropped and
+logged. This was added after a first run with a 3B local model, which produced invented
+tickers (`TOKIO`, `NIXO`), exchange codes (`TWSE`) and placeholders (`NONE`) for general news.
+There are no prices for tickers outside the universe, so they are useless downstream anyway.
 
 `timestamp_source` records whether `published_at` came from the source or had to fall back
 to the ingestion time: anything measuring price reactions must only use source timestamps.
@@ -190,7 +231,8 @@ cd realtime-sentiment-pipeline
 cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
 ```
 
-Edit `.env`. Local model, free and offline (`ollama pull llama3.2:3b` first):
+Edit `.env`. Company news needs a free [Finnhub](https://finnhub.io/register) key
+(`FINNHUB_API_KEY=...`); without it the `finnhub-producer` exits and only RSS is ingested. Local model, free and offline (`ollama pull llama3.2:3b` first):
 
 ```dotenv
 LLM_PROVIDER=ollama
@@ -198,11 +240,12 @@ LLM_MODEL=llama3.2:3b
 INFLUXDB_TOKEN=<a long random string>
 ```
 
-Or a hosted model:
+Or a hosted model (recommended — small local models invent tickers and repeat default scores):
 
 ```dotenv
 LLM_PROVIDER=openrouter        # or: anthropic | mock (no model needed at all)
-LLM_MODEL=google/gemini-2.5-flash-lite
+LLM_MODEL=google/gemini-3.1-flash-lite
+ENRICHER_BATCH_SIZE=10
 OPENROUTER_API_KEY=sk-or-...
 INFLUXDB_TOKEN=<a long random string>
 ```
@@ -253,12 +296,26 @@ All settings are environment variables (see `.env.example`), loaded with `pydant
 | `LLM_MODEL` | `llama3.2:3b` | Model id/tag for the chosen provider |
 | `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Where Ollama listens |
 | `ENRICHER_BATCH_SIZE` | `5` | Headlines per LLM call (10+ for hosted models) |
+| `LLM_MAX_OUTPUT_TOKENS` | `4096` | Hard cap on the reply length |
 | `ENRICHER_BATCH_TIMEOUT_SECONDS` | `5` | Max wait to fill a batch |
 | `POLL_INTERVAL_SECONDS` | `120` | RSS polling interval |
 | `FEEDS_FILE` | `/app/config/feeds.yaml` | Feed list (`source`, `url`) |
+| `FINNHUB_API_KEY` | – | Finnhub key for company news |
+| `WATCHLIST_FILE` | `/app/config/watchlist.yaml` | Tickers, company name, group (`large_cap` / `small_mid_cap`) and sector; the enricher keeps signals only for these |
+| `FINNHUB_POLL_INTERVAL_SECONDS` | `120` | One request per ticker per cycle |
+| `FINNHUB_LOOKBACK_DAYS` | `1` | Calendar days requested per cycle |
 | `INFLUXDB_*` | – | Connection and bootstrap settings |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `sentiment` / `sentiment` / – | PostgreSQL database and credentials |
 
 Add or remove sources in [`config/feeds.yaml`](config/feeds.yaml) and restart the producer.
+
+### Watchlist
+
+[`config/watchlist.yaml`](config/watchlist.yaml) holds 20 tickers split into two groups
+matched by sector: 10 large caps (the control group) and 10 small/mid caps. The design
+question is whether news sentiment carries more information for companies that fewer analysts
+and algorithms follow, so the group is recorded with every ticker. `SPY` is the benchmark for
+abnormal returns.
 
 ---
 
@@ -269,16 +326,26 @@ Add or remove sources in [`config/feeds.yaml`](config/feeds.yaml) and restart th
 ├── docker-compose.yml          # Kafka (KRaft), InfluxDB, Grafana, pipeline services
 ├── Dockerfile                  # one image, three entrypoints
 ├── config/feeds.yaml           # RSS sources
+├── config/watchlist.yaml       # tickers, name, group, sector
 ├── src/sentiment_pipeline/
 │   ├── config.py               # typed settings
 │   ├── schemas.py              # Kafka message contracts
 │   ├── common.py               # Kafka factories, batching, graceful shutdown
-│   ├── producer/rss_producer.py
+│   ├── producer/
+│   │   ├── rss_producer.py
+│   │   ├── finnhub_producer.py # company news per ticker
+│   │   └── seen_store.py       # shared de-duplication state
 │   ├── enricher/main.py        # batching, split-retry, DLQ
 │   ├── llm/
 │   │   ├── prompt.py           # prompt + defensive JSON parsing
 │   │   └── clients.py          # Ollama / OpenRouter / Anthropic / Mock
-│   └── writer/influx_writer.py # idempotent point mapping
+│   ├── storage/
+│   │   ├── schema.sql          # tables, indexes, v_signals view
+│   │   └── postgres.py         # idempotent transactional batch writes
+│   ├── watchlist.py            # universe shared by producer and enricher
+│   └── writer/
+│       ├── influx_writer.py    # idempotent point mapping
+│       └── postgres_writer.py  # system-of-record sink
 ├── grafana/
 │   ├── provisioning/           # datasource + dashboard provider
 │   └── dashboards/news-sentiment.json
@@ -294,7 +361,9 @@ Add or remove sources in [`config/feeds.yaml`](config/feeds.yaml) and restart th
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-pytest -q
+pytest -q                       # unit tests; Postgres integration tests are skipped
+# With a database (CI does this with a Postgres service container):
+PG_TEST_DSN=postgresql://sentiment:<password>@localhost:5432/sentiment pytest -q
 ruff check . && ruff format --check .
 ```
 

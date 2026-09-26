@@ -19,6 +19,9 @@ def setup_logging(level: str = "INFO") -> None:
         level=level.upper(),
         format="%(asctime)s %(levelname)-7s %(name)s | %(message)s",
     )
+    # One INFO line per HTTP request drowns the useful logs; keep only warnings/errors.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 class GracefulShutdown:

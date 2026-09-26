@@ -29,6 +29,24 @@ class ProducerSettings(KafkaSettings):
     http_timeout_seconds: float = 15.0
 
 
+class FinnhubSettings(KafkaSettings):
+    finnhub_api_key: str = ""
+    watchlist_file: str = "config/watchlist.yaml"
+    # Free tier allows ~60 requests/min: 20 tickers every 2 min is ~10/min.
+    finnhub_poll_interval_seconds: int = Field(default=120, ge=30)
+    finnhub_min_request_interval_seconds: float = Field(default=1.1, ge=0)
+    # Finnhub filters by calendar day; on each cycle we ask for [today - lookback, today].
+    finnhub_lookback_days: int = Field(default=1, ge=0, le=30)
+    finnhub_state_file: str = "state/finnhub_seen_ids.json"
+    finnhub_seen_cache_size: int = 20_000
+    http_timeout_seconds: float = 15.0
+
+    @field_validator("finnhub_api_key", mode="before")
+    @classmethod
+    def _clean_key(cls, v: str) -> str:
+        return v.strip().strip("\"'").strip() if isinstance(v, str) else v
+
+
 class LLMSettings(_Base):
     llm_provider: Literal["ollama", "openrouter", "anthropic", "mock"] = "mock"
     llm_model: str = "llama3.2:3b"
@@ -40,10 +58,15 @@ class LLMSettings(_Base):
     llm_temperature: float = 0.0
     llm_timeout_seconds: float = 60.0
     llm_max_retries: int = 4
+    # Hard cap on the reply. Without it, small models in JSON mode can loop on whitespace
+    # until the request times out (seen with llama3.2:3b: 3 x 120s lost on one batch).
+    llm_max_output_tokens: int = Field(default=4096, ge=256)
 
 
 class EnricherSettings(KafkaSettings, LLMSettings):
     consumer_group: str = "sentiment-enricher"
+    # Signals are kept only for these tickers (we only have prices for them). Empty = no filter.
+    watchlist_file: str = "config/watchlist.yaml"
     enricher_batch_size: int = Field(default=10, ge=1, le=50)
     enricher_batch_timeout_seconds: float = 5.0
 
@@ -74,3 +97,35 @@ class WriterSettings(KafkaSettings):
     def _clean(cls, v: str) -> str:
         """Tolerate values quoted or padded in .env (a classic source of 401s)."""
         return v.strip().strip("\"'").strip() if isinstance(v, str) else v
+
+
+class PostgresSettings(_Base):
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_db: str = "sentiment"
+    postgres_user: str = "sentiment"
+    postgres_password: str = ""
+
+    @field_validator("postgres_password", "postgres_user", "postgres_db", mode="before")
+    @classmethod
+    def _clean(cls, v: str) -> str:
+        return v.strip().strip("\"'").strip() if isinstance(v, str) else v
+
+    @property
+    def postgres_conninfo(self) -> str:
+        from psycopg.conninfo import make_conninfo
+
+        return make_conninfo(
+            host=self.postgres_host,
+            port=self.postgres_port,
+            dbname=self.postgres_db,
+            user=self.postgres_user,
+            password=self.postgres_password,
+            application_name="postgres-writer",
+        )
+
+
+class PostgresWriterSettings(KafkaSettings, PostgresSettings):
+    consumer_group: str = "postgres-writer"
+    postgres_writer_batch_size: int = Field(default=200, ge=1)
+    watchlist_file: str = "config/watchlist.yaml"

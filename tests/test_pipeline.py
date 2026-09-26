@@ -190,6 +190,7 @@ def test_ollama_client_builds_openai_style_request_and_parses_reply():
     out = client.classify([make_article(0, "War escalates")])
     assert seen["url"] == "http://host.docker.internal:11434/v1/chat/completions"
     assert seen["body"]["model"] == "llama3.2:3b"
+    assert seen["body"]["max_tokens"] == settings.llm_max_output_tokens  # no runaway replies
     assert seen["body"]["messages"][1]["content"].startswith("Classify these news items:")
     assert out.results[0].sentiment == "negative"
     assert out.results[0].topics == ["war"]
@@ -381,3 +382,87 @@ def test_writer_emits_one_ticker_signal_point_per_company():
         "ticker_signal,event_type=product,sentiment=positive,source=test,ticker=AAPL "
     )
     assert "is_new_info=true" in line and "feed_timestamp=true" in line
+
+
+# ---------------------------------------------------------------- watchlist-aware enrichment
+def _signal(ticker: str, score: float = 0.5):
+    from sentiment_pipeline.schemas import TickerSignal
+
+    return TickerSignal(
+        ticker=ticker,
+        sentiment="positive" if score > 0 else "negative",
+        score=score,
+        confidence=0.8,
+        event_type="product",
+        is_new_info=True,
+    )
+
+
+def test_placeholder_tickers_are_not_signals():
+    from sentiment_pipeline.schemas import normalise_ticker
+
+    assert normalise_ticker("NONE") is None and normalise_ticker("n/a") is None
+    r = LLMResult.model_validate(
+        {
+            "index": 0,
+            "sentiment": "neutral",
+            "score": 0,
+            "confidence": 0.5,
+            "signals": [
+                {
+                    "ticker": "NONE",
+                    "sentiment": "neutral",
+                    "score": 0,
+                    "confidence": 0.5,
+                    "is_new_info": False,
+                },
+                {
+                    "ticker": "NVDA",
+                    "sentiment": "positive",
+                    "score": 0.5,
+                    "confidence": 0.8,
+                    "is_new_info": True,
+                },
+            ],
+        }
+    )
+    assert [s.ticker for s in r.signals] == ["NVDA"]
+
+
+def test_signals_outside_the_watchlist_are_dropped_and_reported():
+    from sentiment_pipeline.enricher.main import restrict_to_universe
+    from sentiment_pipeline.schemas import EnrichedArticle
+
+    result = LLMResult(
+        index=0,
+        sentiment="positive",
+        score=0.4,
+        confidence=0.8,
+        signals=[_signal("NVDA"), _signal("TOKIO"), _signal("TWSE", -0.2)],
+    )
+    art = EnrichedArticle.from_parts(make_article(0), result, provider="m", model="m", latency_ms=1)
+    [kept], dropped = restrict_to_universe([art], {"NVDA", "AAPL"})
+    assert [s.ticker for s in kept.signals] == ["NVDA"]
+    assert sorted(dropped) == ["TOKIO", "TWSE"]
+    # No universe configured: nothing is filtered.
+    [same], none = restrict_to_universe([art], None)
+    assert len(same.signals) == 3 and none == []
+
+
+def test_prompt_lists_the_companies_of_interest():
+    prompt = build_user_prompt([make_article(0)], "NVDA (Nvidia), AAPL (Apple)")
+    assert prompt.startswith("Companies of interest: NVDA (Nvidia), AAPL (Apple)\n")
+    assert build_user_prompt([make_article(0)]).startswith("Classify these news items:")
+
+
+def test_repo_watchlist_gives_the_llm_company_names():
+    from pathlib import Path
+
+    from sentiment_pipeline.enricher.main import _load_universe
+
+    root = Path(__file__).resolve().parents[1]
+    wl = _load_universe(str(root / "config" / "watchlist.yaml"))
+    assert all(e.name for e in wl.tickers)
+    assert "NVDA (Nvidia)" in wl.prompt_hint()
+    assert _load_universe(str(root / "missing.yaml")) is None
+    assert _load_universe("") is None

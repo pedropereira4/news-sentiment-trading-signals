@@ -13,6 +13,7 @@ dependencies = [
     "feedparser>=6.0",
     "httpx>=0.27",
     "influxdb-client>=1.44",
+    "psycopg[binary]>=3.2",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "PyYAML>=6.0",
@@ -24,11 +25,16 @@ dev = ["pytest>=8", "ruff>=0.5"]
 
 [project.scripts]
 sp-producer = "sentiment_pipeline.producer.rss_producer:main"
+sp-finnhub-producer = "sentiment_pipeline.producer.finnhub_producer:main"
 sp-enricher = "sentiment_pipeline.enricher.main:main"
 sp-writer = "sentiment_pipeline.writer.influx_writer:main"
+sp-postgres-writer = "sentiment_pipeline.writer.postgres_writer:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+sentiment_pipeline = ["storage/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

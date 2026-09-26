@@ -43,13 +43,14 @@ def _is_retryable(exc: BaseException) -> bool:
 class LLMClient(ABC):
     provider: str = "base"
 
-    def __init__(self, settings: LLMSettings) -> None:
+    def __init__(self, settings: LLMSettings, companies_hint: str | None = None) -> None:
         self.settings = settings
         self.model = settings.llm_model
+        self.companies_hint = companies_hint
 
     def classify(self, articles: Sequence[RawArticle]) -> ClassificationBatch:
         start = time.perf_counter()
-        text = self._complete_with_retry(build_user_prompt(articles))
+        text = self._complete_with_retry(build_user_prompt(articles, self.companies_hint))
         latency = int((time.perf_counter() - start) * 1000)
         return ClassificationBatch(parse_results(text, len(articles)), latency)
 
@@ -76,8 +77,8 @@ class LLMClient(ABC):
 
 
 class _HttpClient(LLMClient, ABC):
-    def __init__(self, settings: LLMSettings) -> None:
-        super().__init__(settings)
+    def __init__(self, settings: LLMSettings, companies_hint: str | None = None) -> None:
+        super().__init__(settings, companies_hint)
         self.http = httpx.Client(timeout=settings.llm_timeout_seconds)
 
     def close(self) -> None:
@@ -99,6 +100,7 @@ class OpenAICompatibleClient(_HttpClient, ABC):
             json={
                 "model": self.model,
                 "temperature": self.settings.llm_temperature,
+                "max_tokens": self.settings.llm_max_output_tokens,
                 "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -126,8 +128,8 @@ class OllamaClient(OpenAICompatibleClient):
 
     provider = "ollama"
 
-    def __init__(self, settings: LLMSettings) -> None:
-        super().__init__(settings)
+    def __init__(self, settings: LLMSettings, companies_hint: str | None = None) -> None:
+        super().__init__(settings, companies_hint)
         self.base_url = f"{settings.ollama_base_url.rstrip('/')}/v1"
 
 
@@ -144,7 +146,7 @@ class AnthropicClient(_HttpClient):
             },
             json={
                 "model": self.model,
-                "max_tokens": 4096,  # per-ticker signals make the output longer
+                "max_tokens": self.settings.llm_max_output_tokens,
                 "temperature": self.settings.llm_temperature,
                 "system": SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": user_prompt}],
@@ -214,8 +216,8 @@ class MockClient(LLMClient):
         "technology": {"tech", "apple", "google", "microsoft", "software", "chip", "chips"},
     }
 
-    def __init__(self, settings: LLMSettings) -> None:
-        super().__init__(settings)
+    def __init__(self, settings: LLMSettings, companies_hint: str | None = None) -> None:
+        super().__init__(settings, companies_hint)
         self.model = "mock-lexicon"
 
     def classify(self, articles: Sequence[RawArticle]) -> ClassificationBatch:
@@ -252,15 +254,15 @@ class MockClient(LLMClient):
         raise NotImplementedError
 
 
-def build_client(settings: LLMSettings) -> LLMClient:
+def build_client(settings: LLMSettings, companies_hint: str | None = None) -> LLMClient:
     if settings.llm_provider == "ollama":
-        return OllamaClient(settings)
+        return OllamaClient(settings, companies_hint)
     if settings.llm_provider == "openrouter":
         if not settings.openrouter_api_key:
             raise ValueError("OPENROUTER_API_KEY is required when LLM_PROVIDER=openrouter")
-        return OpenRouterClient(settings)
+        return OpenRouterClient(settings, companies_hint)
     if settings.llm_provider == "anthropic":
         if not settings.anthropic_api_key:
             raise ValueError("ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic")
-        return AnthropicClient(settings)
-    return MockClient(settings)
+        return AnthropicClient(settings, companies_hint)
+    return MockClient(settings, companies_hint)

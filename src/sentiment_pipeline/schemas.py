@@ -42,6 +42,10 @@ TimestampSource = Literal["feed", "ingested"]
 
 SCHEMA_VERSION = 2
 
+# Values small models write when there is no company. They match the ticker pattern, so
+# they must be rejected explicitly or they would become signals for a stock called "NONE".
+_PLACEHOLDER_TICKERS = {"NONE", "NA", "N/A", "NULL", "NIL", "UNKNOWN", "TBD", "TBA", "OTHER", "ANY"}
+
 _TICKER_RE = re.compile(r"^[A-Z][A-Z0-9]{0,5}([.\-][A-Z0-9]{1,2})?$")  # AAPL, BRK.B, RDS-A
 
 
@@ -60,6 +64,8 @@ def normalise_ticker(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     t = value.strip().lstrip("$").upper()
+    if t in _PLACEHOLDER_TICKERS:
+        return None
     return t if _TICKER_RE.match(t) else None
 
 
@@ -70,6 +76,8 @@ class RawArticle(BaseModel):
     title: str = Field(min_length=1)
     summary: str | None = None
     url: str | None = None
+    # Original outlet when `source` is an aggregator (e.g. source="finnhub", publisher="Reuters")
+    publisher: str | None = None
     # Tickers the *source* associates with the article (e.g. Finnhub company news).
     # Empty for general feeds: the LLM then identifies the companies itself.
     tickers: list[str] = Field(default_factory=list)
@@ -203,7 +211,7 @@ class EnrichedArticle(RawArticle):
 
 
 class DeadLetter(BaseModel):
-    stage: Literal["enricher", "writer"]
+    stage: Literal["enricher", "writer", "postgres_writer"]
     error: str
     source_topic: str
     partition: int | None = None

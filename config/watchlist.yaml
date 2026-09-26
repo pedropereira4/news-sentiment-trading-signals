@@ -1,0 +1,33 @@
+# Universe for the news -> price experiment.
+#
+# `group` is the variable under study: does news sentiment carry more information for
+# companies that fewer analysts and algorithms follow? Large caps are the control group;
+# small/mid caps are matched to the same sectors so the comparison is not a sector effect.
+#
+# Market caps drift: re-check the grouping before starting a long data collection run.
+benchmark: SPY
+
+tickers:
+  # ---------------------------------------------------------------- large caps (control)
+  - {ticker: AAPL,  name: "Apple",                group: large_cap,     sector: technology}
+  - {ticker: MSFT,  name: "Microsoft",            group: large_cap,     sector: technology}
+  - {ticker: NVDA,  name: "Nvidia",               group: large_cap,     sector: technology}
+  - {ticker: GOOGL, name: "Alphabet / Google",    group: large_cap,     sector: communication}
+  - {ticker: META,  name: "Meta Platforms",       group: large_cap,     sector: communication}
+  - {ticker: AMZN,  name: "Amazon",               group: large_cap,     sector: consumer}
+  - {ticker: TSLA,  name: "Tesla",                group: large_cap,     sector: consumer}
+  - {ticker: JPM,   name: "JPMorgan Chase",       group: large_cap,     sector: financials}
+  - {ticker: LLY,   name: "Eli Lilly",            group: large_cap,     sector: healthcare}
+  - {ticker: XOM,   name: "Exxon Mobil",          group: large_cap,     sector: energy}
+
+  # ---------------------------------------------------------------- small / mid caps
+  - {ticker: SOUN,  name: "SoundHound AI",        group: small_mid_cap, sector: technology}
+  - {ticker: IONQ,  name: "IonQ",                 group: small_mid_cap, sector: technology}
+  - {ticker: UPST,  name: "Upstart",              group: small_mid_cap, sector: financials}
+  - {ticker: AFRM,  name: "Affirm",               group: small_mid_cap, sector: financials}
+  - {ticker: CRSP,  name: "CRISPR Therapeutics",  group: small_mid_cap, sector: healthcare}
+  - {ticker: BEAM,  name: "Beam Therapeutics",    group: small_mid_cap, sector: healthcare}
+  - {ticker: CELH,  name: "Celsius Holdings",     group: small_mid_cap, sector: consumer}
+  - {ticker: ETSY,  name: "Etsy",                 group: small_mid_cap, sector: consumer}
+  - {ticker: PLUG,  name: "Plug Power",           group: small_mid_cap, sector: energy}
+  - {ticker: RUN,   name: "Sunrun",               group: small_mid_cap, sector: energy}

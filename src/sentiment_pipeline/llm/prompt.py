@@ -28,15 +28,16 @@ Rules:
 - Judge impact on the stock, not whether the event is good for society. A layoff that cuts costs can be positive for the stock.
 - Weigh the whole item: "revenue beats estimates but guidance cut" is usually negative.
 - The same item can be positive for one company and negative for another (e.g. a rival losing a contract).
-- If an item lists "Tickers:", include a signal for each of them; add others only if clearly the subject.
-- Only include companies you can map to a ticker with confidence. No signals is a valid answer (e.g. general politics).
+- If a list of "Companies of interest" is given, only return signals for those tickers. Never invent a ticker, and never use exchange codes or placeholders such as "NONE".
+- If an item lists "Tickers:", include a signal for each of them.
+- An item that does not materially concern any company of interest gets an empty signals list (e.g. general politics). That is a valid, common answer.
 - Reuse the same topic wording for the same concept across items.
 - Respond with JSON ONLY, no prose, in exactly this shape:
 {"results": [{"index": 0, "sentiment": "positive", "score": 0.6, "confidence": 0.8, "topics": ["earnings"], "signals": [{"ticker": "NVDA", "sentiment": "positive", "score": 0.7, "confidence": 0.85, "event_type": "earnings", "is_new_info": true}]}]}
 - Return exactly one result per input index."""
 
 
-def build_user_prompt(articles: Sequence[RawArticle]) -> str:
+def build_user_prompt(articles: Sequence[RawArticle], companies_hint: str | None = None) -> str:
     lines = []
     for i, a in enumerate(articles):
         text = a.title.strip()
@@ -44,11 +45,12 @@ def build_user_prompt(articles: Sequence[RawArticle]) -> str:
             summary = re.sub(r"<[^>]+>", "", a.summary).strip()[:280]
             if summary:
                 text += f" — {summary}"
-        line = f"{i}. [{a.source}] {text}"
+        line = f"{i}. [{a.publisher or a.source}] {text}"
         if a.tickers:
             line += f" (Tickers: {', '.join(a.tickers)})"
         lines.append(line)
-    return "Classify these news items:\n" + "\n".join(lines)
+    header = f"Companies of interest: {companies_hint}\n\n" if companies_hint else ""
+    return header + "Classify these news items:\n" + "\n".join(lines)
 
 
 class LLMParseError(ValueError):

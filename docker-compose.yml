@@ -93,6 +93,25 @@ services:
       timeout: 5s
       retries: 10
 
+  # System of record for the event study (no retention limit, unlike InfluxDB).
+  # Exposed on localhost:5432 for notebooks / DBeaver / psql.
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sentiment}
+      POSTGRES_USER: ${POSTGRES_USER:-sentiment}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-please}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   grafana:
     image: grafana/grafana:11.2.0
     container_name: grafana
@@ -122,6 +141,13 @@ services:
     volumes:
       - producer-state:/app/state
 
+  finnhub-producer:
+    <<: *app
+    container_name: finnhub-producer
+    command: ["sp-finnhub-producer"]
+    volumes:
+      - finnhub-state:/app/state
+
   enricher:
     <<: *app
     command: ["sp-enricher"]
@@ -145,7 +171,24 @@ services:
       influxdb:
         condition: service_healthy
 
+  postgres-writer:
+    <<: *app
+    container_name: postgres-writer
+    command: ["sp-postgres-writer"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-sentiment}
+      POSTGRES_USER: ${POSTGRES_USER:-sentiment}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-please}
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+
 volumes:
+  postgres-data:
   influxdb-data:
   grafana-data:
   producer-state:
+  finnhub-state:
