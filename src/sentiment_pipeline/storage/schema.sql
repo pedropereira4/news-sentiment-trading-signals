@@ -79,3 +79,25 @@ CREATE TABLE IF NOT EXISTS price_bars (
     feed         text NOT NULL,
     PRIMARY KEY (ticker, ts)
 );
+
+-- Output of the event study (sp-event-study): one row per (signal, horizon), rewritten on
+-- every run. `run_label` says whether it came from the registered analysis or a pilot run.
+CREATE TABLE IF NOT EXISTS event_returns (
+    article_id        text NOT NULL,
+    ticker            text NOT NULL,
+    horizon           text NOT NULL,
+    status            text NOT NULL CHECK (status IN ('ok', 'pending', 'no_price')),
+    t0                timestamptz NOT NULL,
+    t1                timestamptz,
+    p0                double precision,
+    p1                double precision,
+    spy_p0            double precision,
+    spy_p1            double precision,
+    ret               double precision,
+    spy_ret           double precision,
+    abnormal_ret      double precision,
+    traded_in_window  boolean,
+    run_label         text NOT NULL,
+    computed_at       timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (article_id, ticker, horizon)
+);

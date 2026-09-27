@@ -35,4 +35,13 @@ analysis:
     interaction; the interaction coefficient answers the hypothesis.
   strong_signal: {min_abs_score: 0.6, is_new_info: true, exclude_event_types: [commentary]}
 
-amendments: []
+amendments:
+  - date: 2026-09-27
+    change: >
+      Inference for the primary test specified: each coefficient uses the largest of the
+      classic, HC1 and day-clustered standard errors, with a t distribution on
+      min(G - 1, n - k) degrees of freedom.
+    reason: >
+      On simulated data with 7 trading days, day-clustered standard errors came out ~7x
+      smaller than plain OLS, which would produce false positives. Decided before the
+      collection start; no real results had been computed.

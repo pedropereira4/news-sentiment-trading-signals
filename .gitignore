@@ -11,3 +11,5 @@ venv/
 build/
 dist/
 state/
+# Pilot event-study runs are checks, not results
+reports/*_pilot.*

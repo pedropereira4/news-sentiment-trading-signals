@@ -361,6 +361,35 @@ Any later change goes into `amendments` with a date and a reason, and is reporte
 results. Stopping when the numbers look good, or reporting whichever horizon "worked", are
 the usual ways a backtest finds an effect that is not there.
 
+### Running the event study
+
+The analysis runs on demand from the host. It reads PostgreSQL on `localhost:$POSTGRES_PORT`
+(default 5432; set `POSTGRES_PORT=5433` in `.env` if a local PostgreSQL install already uses 5432):
+
+```bash
+pip install -e ".[analysis]"
+sp-event-study --status   # progress towards the stopping rule; computes no returns
+sp-event-study --pilot    # same code on all data so far, labelled PILOT (checks, not results)
+sp-event-study            # the registered analysis -> reports/event_study_<date>.md + chart
+```
+
+For every eligible signal and horizon it computes the market-adjusted abnormal return
+(stock return minus `SPY` return), stores it in `event_returns`, and writes a report with the
+mean abnormal return of strong signals per group (95% CIs), the registered regression and the
+method. Details that keep it honest:
+
+- **No look-ahead in prices:** the price at *t* is the close of the last 1-minute bar that
+  *ended* by *t*; a bar that contains the news minute may include trades after it.
+- **Thin trading is visible:** small caps often have no trade in a given minute, so the price
+  at *t* is the last trade, and the report shows the share of windows with at least one trade.
+- **Unfinished windows are `pending`**, never filled with the last known price.
+- **Trading days come from `SPY`'s own sessions**, so weekends and holidays need no calendar.
+- **Conservative inference:** each coefficient uses the largest of the classic, HC1 and
+  day-clustered standard errors. On simulated data with 7 trading days the clustered errors
+  alone were ~7x too small; this is recorded as a dated amendment in `study.yaml`.
+- **Known-answer tests:** synthetic prices with a planted effect (e.g. +40 bps per unit of
+  score for small caps) must be recovered, inside the reported confidence interval.
+
 ---
 
 ## Project structure
@@ -383,6 +412,11 @@ the usual ways a backtest finds an effect that is not there.
 │   ├── llm/
 │   │   ├── prompt.py           # prompt + defensive JSON parsing
 │   │   └── clients.py          # Ollama / OpenRouter / Anthropic / Mock
+│   ├── analysis/
+│   │   ├── prices.py           # point-in-time prices, trading calendar from SPY
+│   │   ├── event_study.py      # abnormal returns, CIs, registered regression
+│   │   ├── report.py           # markdown report + chart
+│   │   └── cli.py              # sp-event-study (--status / --pilot)
 │   ├── market/
 │   │   ├── alpaca.py           # bars client: pagination, retries, sip -> iex fallback
 │   │   └── price_ingestor.py   # incremental 1-min bars -> price_bars
