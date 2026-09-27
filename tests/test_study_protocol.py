@@ -25,3 +25,11 @@ def test_protocol_matches_the_pipeline_configuration():
     assert PROTOCOL["data"]["benchmark"] == wl.benchmark
     assert PROTOCOL["analysis"]["primary_horizon"] in PROTOCOL["analysis"]["horizons"]
     assert isinstance(PROTOCOL["amendments"], list)
+
+
+def test_rss_producer_is_off_by_default_during_the_study():
+    """Only Finnhub news counts, and LLM batches should hold the same kind of news throughout."""
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    assert compose["services"]["producer"].get("profiles") == ["rss"]
+    assert "profiles" not in compose["services"]["finnhub-producer"]
+    assert PROTOCOL["data"]["news_source"] == "finnhub"

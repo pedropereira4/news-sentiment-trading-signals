@@ -130,6 +130,9 @@ services:
       INFLUXDB_ORG: ${INFLUXDB_ORG}
       INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      POSTGRES_DB: ${POSTGRES_DB:-sentiment}
+      POSTGRES_USER: ${POSTGRES_USER:-sentiment}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-please}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/etc/grafana/dashboards:ro
@@ -137,12 +140,18 @@ services:
     depends_on:
       influxdb:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   # ---------------------------------------------------------------- Pipeline services
+  # General-news RSS feeds. Off by default since the event study started (2026-09-28): the
+  # study uses Finnhub only, and LLM batches should contain the same kind of news throughout.
+  # Run it with: docker compose --profile rss up -d producer
   producer:
     <<: *app
     container_name: producer
     command: ["sp-producer"]
+    profiles: ["rss"]
     volumes:
       - producer-state:/app/state
 

@@ -116,3 +116,46 @@ def test_bars_round_trip_and_results_are_rewritten_each_run(conn):
         "SELECT horizon, status, abnormal_ret, run_label FROM event_returns"
     ).fetchall()
     assert rows == [("1d", "ok", 0.1, "registered")]
+
+
+def test_dashboard_queries_run_and_count_what_the_analysis_counts(conn):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "build_study_dashboard", ROOT / "scripts" / "build_study_dashboard.py"
+    )
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+
+    write_batch(
+        conn,
+        [
+            article(1, "NVDA"),
+            article(2, "IRDM"),
+            article(3, "IRDM", day=30),
+            article(4, "IRDM", source="bbc_business"),
+            article(5, "IRDM", model="llama3.2:3b"),
+            article(6, "IRDM", day=25),  # before collection_start
+        ],
+    )
+    upsert_bars(conn, [Bar("SPY", datetime.now(UTC), 1, 1, 1, 500.0, 10, 1, 1, "sip")])
+    dashboard = builder.build(PROTOCOL)
+    results = {}
+    for title, sql in builder.all_sql(dashboard):
+        sql = sql.replace("$__timeFilter(published_at)", "published_at > now() - interval '1 year'")
+        results[title] = conn.execute(sql).fetchall()  # every panel query must run
+
+    analysis, _ = load_signals(conn, PROTOCOL, PROTOCOL.data.collection_start, date(2026, 10, 30))
+    n_small = int((analysis["cap_group"] == "small_mid_cap").sum())
+    assert results["Small-cap signals (stopping rule)"] == [(n_small,)] == [(2,)]
+    assert results["Large-cap signals"] == [(1,)]
+    assert dict(results["Signals excluded from the study"]) == {
+        "eligible": 3,
+        "not from the registered news source": 1,
+        "different LLM model": 1,
+    }
+    per_ticker = {row[0]: row[3] for row in results["Signals per ticker (collection period)"]}
+    assert per_ticker["IRDM"] == 2 and per_ticker["NVDA"] == 1 and per_ticker["AAPL"] == 0
+    assert len(per_ticker) == 40  # every watchlist ticker, with or without signals
+    coverage = {row[0]: row[1:3] for row in results["Price data coverage (last 7 days)"]}
+    assert coverage["SPY"] == ("Benchmark", 1) and coverage["IRDM"] == ("Small caps", 0)

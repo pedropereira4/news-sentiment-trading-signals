@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -20,7 +20,7 @@ from sentiment_pipeline.analysis.event_study import (
     primary_regression,
     summarize,
 )
-from sentiment_pipeline.analysis.prices import PriceIndex
+from sentiment_pipeline.analysis.prices import ET, PriceIndex
 from sentiment_pipeline.analysis.protocol import Protocol, load_protocol
 from sentiment_pipeline.analysis.report import plot_summary, render_markdown
 from sentiment_pipeline.common import setup_logging
@@ -41,6 +41,20 @@ def stopping_status(protocol: Protocol, n_small: int, today: date) -> tuple[bool
         + (" - REACHED" if reached else " - collecting")
     )
     return reached, text
+
+
+def collection_counts(signals: pd.DataFrame, protocol: Protocol) -> dict[str, int]:
+    """Signals per group inside the registered collection period.
+
+    The stopping rule counts only these, even in a pilot run that also looks at older data.
+    """
+    out = {"large_cap": 0, "small_mid_cap": 0}
+    if signals.empty:
+        return out
+    # Same boundary as load_signals: midnight in New York on the first collection day.
+    start = pd.Timestamp(datetime.combine(protocol.data.collection_start, time(0), tzinfo=ET))
+    counted = signals.loc[signals["published_at"] >= start, "cap_group"].value_counts()
+    return {g: int(counted.get(g, 0)) for g in out}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -65,12 +79,12 @@ def main(argv: list[str] | None = None) -> None:
     ensure_schema(conn)
     signals, excluded = load_signals(conn, protocol, since, until)
     groups = signals["cap_group"].value_counts() if not signals.empty else pd.Series(dtype=int)
-    n_small = int(groups.get("small_mid_cap", 0))
-    reached, stopping = stopping_status(protocol, n_small, today)
+    counts = collection_counts(signals, protocol)
+    reached, stopping = stopping_status(protocol, counts["small_mid_cap"], today)
 
     if args.status:
         print(f"Stopping rule: {stopping}")
-        print(f"Large-cap signals: {int(groups.get('large_cap', 0))}")
+        print(f"Large-cap signals: {counts['large_cap']}")
         if not reached:
             print("Keep collecting. (--status never computes returns, so it is safe to run.)")
         return

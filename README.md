@@ -1,25 +1,64 @@
-# Real-time News Sentiment Pipeline
+# News Sentiment Trading Signals
 
-**Streaming news headlines → LLM sentiment & topic extraction → time-series analytics, live.**
+**Does LLM-read news move stock prices, and more so for companies few people follow?**
+A real-time pipeline that turns company news into per-stock sentiment signals with an LLM,
+and a pre-registered event study that tests them against market prices.
 
+[![CI](https://github.com/pedropereira4/news-sentiment-trading-signals/actions/workflows/ci.yml/badge.svg)](https://github.com/pedropereira4/news-sentiment-trading-signals/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Kafka](https://img.shields.io/badge/Apache%20Kafka-KRaft-black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791)
 ![InfluxDB](https://img.shields.io/badge/InfluxDB-2.7-22ADF6)
 ![Grafana](https://img.shields.io/badge/Grafana-11-F46800)
-![Docker](https://img.shields.io/badge/docker%20compose-ready-2496ED)
+![Docker](https://img.shields.io/badge/docker%20compose-11%20services-2496ED)
 
-This project ingests company news for a watchlist of US stocks (Finnhub) and RSS feeds from
-major news outlets, streams every new item through Apache Kafka, uses a Large Language Model to
-classify its **sentiment**, extract **key topics** and produce **per-ticker signals** (direction,
-strength, event type, whether it is new information), stores the results in InfluxDB and
-visualises them on a live Grafana dashboard.
+| | |
+|---|---|
+| **Question** | Does news sentiment predict abnormal returns (vs `SPY`), and is the effect larger for a random sample of S&P SmallCap 600 stocks than for the 10 most covered large caps? |
+| **Data** | Finnhub company news for 40 US stocks, classified by an LLM (Gemini via OpenRouter) into one signal per company; 1-minute prices from Alpaca (SIP) |
+| **Method** | Market-adjusted event study at 5 min, 1 h, 1 day and 5 days; protocol, stopping rule and primary test [registered before any result](config/study.yaml) |
+| **Engineering** | Kafka streaming, validated LLM output, idempotent sinks, PostgreSQL system of record, dashboards as code, CI with unit, known-answer and real-Postgres tests |
+| **Status** | Collecting data from 2026-09-28 until 300 small-cap signals or 2026-10-30. [Results](#results) will be published whatever they show. |
 
-It is built as a production-style, event-driven system rather than a notebook: typed message
-contracts, micro-batched LLM calls, at-least-once delivery with idempotent writes, a dead-letter
-queue, retries with backoff, tests and CI. The whole stack starts with one command.
+![Event study data collection dashboard](docs/img/dashboard-collection.png)
 
-<!-- Add a screenshot after your first run: docs/dashboard.png -->
-<!-- ![Dashboard](docs/dashboard.png) -->
+---
+
+## Why this project
+
+Sentiment models are easy to build and hard to evaluate. Most demos stop at "the model says
+this headline is positive". This one asks whether that label is worth anything in the market,
+and sets the test up so that the answer can be "no":
+
+- **Per-company signals, not per-headline tone.** *"Apple wins a contract from Samsung"* is
+  good for one stock and bad for the other; the LLM returns direction, strength, event type
+  and whether the news is new information, for each company.
+- **A control group chosen by a rule, not by me.** 30 small caps drawn at random (fixed seed)
+  from the S&P SmallCap 600, against the 10 most covered large caps in the same six sectors.
+- **No peeking.** The hypothesis, data filters, horizons, stopping rule and regression were
+  fixed in [`study.yaml`](config/study.yaml) before collection; the monitoring dashboard shows
+  data volume and health, never returns; changes are dated amendments.
+- **No look-ahead.** Prices at time *t* come only from bars that had closed by *t*; windows that
+  have not finished are `pending`, never filled in.
+
+It runs 24/7 on a laptop for a few dollars a month of LLM usage (~$0.0002 per news item).
+
+---
+
+## Results
+
+> **Collection in progress.** The registered analysis runs once, when the stopping rule is
+> met (300 small-cap signals or 2026-10-30). This section will then hold the report and chart
+> from `sp-event-study`, including null results.
+
+| | Large caps | Small caps (S&P 600 sample) |
+|---|---|---|
+| Eligible signals | – | – |
+| Mean 1-day abnormal return, strong positive signals | – | – |
+| Mean 1-day abnormal return, strong negative signals | – | – |
+
+**Primary test** (score × small-cap interaction, 1-day abnormal return, bps per unit of
+score): –
 
 ---
 
@@ -29,8 +68,8 @@ queue, retries with backoff, tests and CI. The whole stack starts with one comma
 flowchart LR
     subgraph Sources
         FH[Finnhub company news<br/>40-ticker watchlist]:::src
-        RSS1[BBC]:::src
-        RSS2[Guardian / NPR / HN ...]:::src
+        RSS[RSS feeds<br/>BBC, Guardian, NPR ...<br/><i>optional</i>]:::src
+        AL[Alpaca market data<br/>1-min bars, SIP]:::src
     end
 
     F["<b>finnhub-producer</b><br/>paced polling · merge per story"]
@@ -41,21 +80,24 @@ flowchart LR
         T3[(news.dlq)]
     end
     E["<b>enricher</b><br/>micro-batch · LLM · validate"]
-    LLM{{"LLM<br/>Ollama (local) /<br/>OpenRouter / Anthropic"}}
-    W["<b>writer</b><br/>line protocol · idempotent"]
-    PW["<b>postgres-writer</b><br/>upsert · transactional"]
-    I[(InfluxDB<br/>30-day dashboards)]
-    PG[(PostgreSQL<br/>system of record)]
-    AL[Alpaca market data<br/>1-min bars]:::src
+    LLM{{"LLM<br/>OpenRouter / Anthropic /<br/>Ollama (local)"}}
+    W["<b>writer</b><br/>idempotent points"]
+    PW["<b>postgres-writer</b><br/>transactional upserts"]
     PI["<b>price-ingestor</b><br/>incremental · backfill"]
-    G[Grafana dashboard]
+    I[(InfluxDB<br/>30-day live view)]
+    PG[(PostgreSQL<br/>system of record)]
+    G[Grafana<br/>2 dashboards]
+    ES["<b>sp-event-study</b><br/>abnormal returns · report"]
 
     FH --> F --> T1
-    RSS1 & RSS2 --> P --> T1 --> E
+    RSS -.-> P -.-> T1 --> E
     E <--> LLM
-    E --> T2 --> W --> I --> G
+    E --> T2
+    T2 --> W --> I --> G
     T2 --> PW --> PG
     AL --> PI --> PG
+    PG --> G
+    PG --> ES
     E -. invalid / unclassifiable .-> T3
     W -. invalid .-> T3
 
@@ -65,7 +107,7 @@ flowchart LR
 | Service | Responsibility | Scales by |
 |---|---|---|
 | **finnhub-producer** | Polls Finnhub company news for each watchlist ticker, merges copies of the same story returned for several tickers, paces requests under the free-tier limit | one instance (stateful poller) |
-| **producer** | Polls RSS feeds, builds `RawArticle`, drops duplicates (persistent LRU), publishes keyed by source | one instance (stateful poller) |
+| **producer** *(optional)* | Polls general-news RSS feeds, builds `RawArticle`, drops duplicates (persistent LRU), publishes keyed by source. Off by default (compose profile `rss`): the event study uses company news only | one instance (stateful poller) |
 | **enricher** | Consumes `news.raw` in batches, one LLM call per batch, validates JSON output, publishes `EnrichedArticle` | consumer group, up to #partitions |
 | **writer** | Consumes `news.enriched`, writes batched points to InfluxDB, commits offsets after the write | consumer group |
 | **postgres-writer** | Consumes `news.enriched` in its own consumer group, upserts articles and per-ticker signals into PostgreSQL in one transaction per batch, then commits offsets | consumer group |
@@ -108,9 +150,9 @@ with no model at all.
 (`src/sentiment_pipeline/schemas.py`). Idempotent Kafka producers (`acks=all`,
 `enable.idempotence`), `zstd` compression and source-based keys preserve per-source ordering.
 
-**6. Dashboard as code.** Grafana datasource and dashboard are provisioned automatically;
-the dashboard JSON is generated from `scripts/build_dashboard.py` so Flux queries are
-reviewable in diffs.
+**6. Dashboards as code.** Grafana datasources and dashboards are provisioned automatically;
+the JSON is generated by scripts, so Flux and SQL queries are reviewable in diffs, and every
+SQL panel query is executed against a real Postgres in the tests.
 
 ---
 
@@ -216,16 +258,30 @@ to the ingestion time: anything measuring price reactions must only use source t
 
 ---
 
-## Dashboard
+## Dashboards
 
-Provisioned automatically at <http://localhost:3000> (home dashboard):
+Two dashboards are provisioned automatically at <http://localhost:3000>, both generated from
+code ([`build_dashboard.py`](scripts/build_dashboard.py),
+[`build_study_dashboard.py`](scripts/build_study_dashboard.py)); tests fail if the committed
+JSON drifts from its generator.
 
-- Articles analysed · average sentiment · negative share · LLM latency
-- Sentiment trend per source (30-min mean)
-- Sentiment distribution and hourly volume by sentiment
-- Top topics and per-topic average sentiment
-- Latest headlines table with clickable links
-- `Source` variable to filter every panel
+**Event study - data collection** (PostgreSQL). Progress and health of the study, built from
+the registered protocol so it counts exactly what the analysis will use:
+
+- Small-cap signals against the stopping rule, large-cap signals, days left
+- Freshness of the last stored article and the last price bar
+- Eligible signals and mean LLM score per day, per group
+- Signals per ticker (including tickers with none yet) and event types per group
+- Latest strong signals with links, signals excluded by protocol rule, price coverage per ticker
+- **No returns anywhere**: a test fails if the dashboard ever reads `event_returns`
+
+**Real-time news sentiment** (InfluxDB, home dashboard). The live view of the stream:
+
+- Articles analysed, average sentiment, negative share, LLM latency
+- Sentiment trend per source, distribution and hourly volume by sentiment
+- Top topics, per-topic sentiment, latest headlines with links
+
+![Real-time news sentiment dashboard](docs/img/dashboard-news.png)
 
 ---
 
@@ -236,13 +292,15 @@ Provisioned automatically at <http://localhost:3000> (home dashboard):
 [Anthropic](https://console.anthropic.com) API key.
 
 ```bash
-git clone https://github.com/<your-user>/realtime-sentiment-pipeline.git
-cd realtime-sentiment-pipeline
+git clone https://github.com/pedropereira4/news-sentiment-trading-signals.git
+cd news-sentiment-trading-signals
 cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
 ```
 
 Edit `.env`. Company news needs a free [Finnhub](https://finnhub.io/register) key
-(`FINNHUB_API_KEY=...`); without it the `finnhub-producer` exits and only RSS is ingested. Local model, free and offline (`ollama pull llama3.2:3b` first):
+(`FINNHUB_API_KEY=...`). General-news RSS feeds are optional: add `--profile rss` to the
+`docker compose` commands to ingest them too (without a Finnhub key, they are the only source).
+Local model, free and offline (`ollama pull llama3.2:3b` first):
 
 ```dotenv
 LLM_PROVIDER=ollama
@@ -290,9 +348,9 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
 docker compose down -v                                   # stop and wipe data
 ```
 
-> **Cost note:** with Ollama the pipeline costs nothing at all. On a hosted provider, the
-> default 6 feeds at a 2-minute poll produce a few hundred headlines per day, which batching
-> turns into a few dozen API calls — cents per month on a small model.
+> **Cost note:** with Ollama the pipeline costs nothing at all. With Gemini 3.1 Flash Lite on
+> OpenRouter, batches of 10 cost about $0.0002 per news item: the 40-ticker watchlist comes to
+> a few dollars a month. Finnhub (free tier) and Alpaca market data (free plan) cost nothing.
 
 ---
 
@@ -320,7 +378,8 @@ All settings are environment variables (see `.env.example`), loaded with `pydant
 | `PRICE_POLL_INTERVAL_SECONDS` / `PRICE_BACKFILL_DAYS` | `900` / `10` | Price polling and initial history |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `sentiment` / `sentiment` / – | PostgreSQL database and credentials |
 
-Add or remove sources in [`config/feeds.yaml`](config/feeds.yaml) and restart the producer.
+Add or remove sources in [`config/feeds.yaml`](config/feeds.yaml) and restart the producer
+(`docker compose --profile rss up -d producer`).
 
 ### Watchlist
 
@@ -396,10 +455,11 @@ method. Details that keep it honest:
 
 ```
 .
-├── docker-compose.yml          # Kafka (KRaft), InfluxDB, Grafana, pipeline services
-├── Dockerfile                  # one image, three entrypoints
+├── docker-compose.yml          # Kafka, InfluxDB, PostgreSQL, Grafana, pipeline services
+├── Dockerfile                  # one image, one command per service
 ├── config/feeds.yaml           # RSS sources
-├── config/watchlist.yaml       # tickers, name, group, sector
+├── config/watchlist.yaml       # tickers, name, group, sector (generated)
+├── config/study.yaml           # registered study protocol + amendments
 ├── src/sentiment_pipeline/
 │   ├── config.py               # typed settings
 │   ├── schemas.py              # Kafka message contracts
@@ -415,6 +475,7 @@ method. Details that keep it honest:
 │   ├── analysis/
 │   │   ├── prices.py           # point-in-time prices, trading calendar from SPY
 │   │   ├── event_study.py      # abnormal returns, CIs, registered regression
+│   │   ├── data.py             # protocol filters, exclusions, results table
 │   │   ├── report.py           # markdown report + chart
 │   │   └── cli.py              # sp-event-study (--status / --pilot)
 │   ├── market/
@@ -428,12 +489,15 @@ method. Details that keep it honest:
 │       ├── influx_writer.py    # idempotent point mapping
 │       └── postgres_writer.py  # system-of-record sink
 ├── grafana/
-│   ├── provisioning/           # datasource + dashboard provider
-│   └── dashboards/news-sentiment.json
-├── scripts/build_dashboard.py  # dashboard as code
+│   ├── provisioning/           # InfluxDB + PostgreSQL datasources, dashboard provider
+│   └── dashboards/             # generated JSON (do not edit by hand)
+├── scripts/build_dashboard.py  # live sentiment dashboard as code
+├── scripts/build_study_dashboard.py  # study dashboard, generated from study.yaml
 ├── scripts/build_watchlist.py  # rule-based small-cap sample (seeded)
 ├── data/                       # S&P SmallCap 600 constituent snapshot
-├── tests/                      # pytest unit tests
+├── docs/img/                    # dashboard screenshots
+├── reports/                    # event-study reports (pilot runs are git-ignored)
+├── tests/                      # unit, known-answer and Postgres integration tests
 └── .github/workflows/ci.yml    # lint, tests, compose validation
 ```
 
@@ -446,7 +510,7 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -e ".[dev]"
 pytest -q                       # unit tests; Postgres integration tests are skipped
 # With a database (CI does this with a Postgres service container):
-PG_TEST_DSN=postgresql://sentiment:<password>@localhost:5432/sentiment pytest -q
+PG_TEST_DSN=postgresql://sentiment:<password>@localhost:<POSTGRES_PORT>/sentiment pytest -q
 ruff check . && ruff format --check .
 ```
 
@@ -462,6 +526,8 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:29092 OLLAMA_BASE_URL=http://localhost:11434 s
 
 ## Roadmap
 
+- [ ] Publish the registered event-study results (after 2026-10-30)
+- [ ] Signal engine: strong signals -> Alpaca paper-trading orders with position limits
 - [ ] Evaluation set: compare LLM labels against a human-labelled sample (accuracy / Cohen's κ) and against FinBERT as a baseline
 - [ ] Structured outputs / tool calling instead of prompt-enforced JSON
 - [ ] Schema Registry (Avro/Protobuf) instead of JSON

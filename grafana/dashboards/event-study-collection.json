@@ -1,0 +1,813 @@
+{
+  "uid": "event-study-collection",
+  "title": "Event study - data collection",
+  "description": "Progress and health of the event-study data collection. Shows no returns on purpose: the study is analysed once, at the stopping rule.",
+  "tags": [
+    "event-study",
+    "postgres"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5m",
+  "time": {
+    "from": "2026-09-28T04:00:00.000Z",
+    "to": "now"
+  },
+  "links": [],
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "bargauge",
+      "title": "Small-cap signals (stopping rule)",
+      "description": "Eligible small-cap signals since 2026-09-28. The study stops at 300 or on 2026-10-30, whichever comes first.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS \"Small-cap signals\"\nFROM v_signals\nWHERE cap_group = 'small_mid_cap' AND published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 300,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#9085e9"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "text",
+        "namePlacement": "hidden"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Large-cap signals",
+      "description": "Eligible large-cap signals since the start of the collection.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM v_signals WHERE cap_group = 'large_cap' AND published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#199e70"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Days left",
+      "description": "Calendar days until the stopping date (2026-10-30).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT GREATEST(DATE '2026-10-30' - (now() AT TIME ZONE 'UTC')::date, 0) AS days"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Latest news stored",
+      "description": "Last article written. Hours old on a weekday: check it.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT extract(epoch FROM max(stored_at)) * 1000 AS latest FROM articles"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Latest price bar",
+      "description": "Newest 1-minute bar from Alpaca. SIP data arrives ~16 minutes late, and there are no bars outside market hours.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT extract(epoch FROM max(ts)) * 1000 AS latest FROM price_bars"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false,
+          "fields": ""
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Eligible signals per day",
+      "description": "New York calendar days. Weekends are quiet.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('day', published_at AT TIME ZONE 'America/New_York')\n         AT TIME ZONE 'America/New_York' AS time,\n       count(*) FILTER (WHERE cap_group = 'large_cap') AS \"Large caps\",\n       count(*) FILTER (WHERE cap_group = 'small_mid_cap') AS \"Small caps\"\nFROM v_signals\nWHERE $__timeFilter(published_at) AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "barAlignment": 0
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Large caps"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Small caps"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "top"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Mean signal score per day",
+      "description": "The LLM's average read of the news (-1 to +1). Sentiment, not returns.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('day', published_at AT TIME ZONE 'America/New_York')\n         AT TIME ZONE 'America/New_York' AS time,\n       avg(score) FILTER (WHERE cap_group = 'large_cap') AS \"Large caps\",\n       avg(score) FILTER (WHERE cap_group = 'small_mid_cap') AS \"Small caps\"\nFROM v_signals\nWHERE $__timeFilter(published_at) AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)\nGROUP BY 1\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": -1,
+          "max": 1,
+          "decimals": 2,
+          "custom": {
+            "lineWidth": 2,
+            "showPoints": "always",
+            "pointSize": 8,
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Large caps"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Small caps"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "top"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Signals per ticker (collection period)",
+      "description": "Every watchlist ticker, including those with no signals yet: a sample dominated by a few names says less about small caps in general.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 14,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT t.ticker AS \"Ticker\",\n       CASE t.cap_group WHEN 'large_cap' THEN 'Large caps' WHEN 'small_mid_cap' THEN 'Small caps' END AS \"Group\",\n       t.sector AS \"Sector\",\n       count(v.ticker) AS \"Signals\",\n       count(v.ticker) FILTER (WHERE abs(v.score) >= 0.6 AND v.is_new_info AND v.event_type NOT IN ('commentary')) AS \"Strong\",\n       round(avg(v.score)::numeric, 2) AS \"Mean score\",\n       max(v.published_at) AS \"Last signal\"\nFROM tickers t\nLEFT JOIN v_signals v\n  ON v.ticker = t.ticker AND v.published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (v.source <> 'finnhub') AND NOT (NOT v.feed_timestamp) AND NOT (v.llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (v.cap_group IS NULL)\nGROUP BY t.ticker, t.cap_group, t.sector\nORDER BY t.cap_group DESC, count(v.ticker) DESC, t.ticker"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Signals"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "basic",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last signal"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mean score"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "barchart",
+      "title": "Event types",
+      "description": "What the news is about, per group (collection period).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 13,
+        "w": 10,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT event_type AS \"Event type\",\n       count(*) FILTER (WHERE cap_group = 'large_cap') AS \"Large caps\",\n       count(*) FILTER (WHERE cap_group = 'small_mid_cap') AS \"Small caps\"\nFROM v_signals\nWHERE published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)\nGROUP BY event_type\nORDER BY count(*) DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Large caps"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Small caps"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "Event type",
+        "showValue": "never",
+        "groupWidth": 0.75,
+        "barWidth": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "top",
+          "showLegend": true
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Latest strong signals",
+      "description": "Signals that pass the registered 'strong' rule (|score| >= 0.6, new information, not commentary). Click a headline to open the article.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT published_at AS \"Published\",\n       ticker AS \"Ticker\",\n       CASE cap_group WHEN 'large_cap' THEN 'Large caps' WHEN 'small_mid_cap' THEN 'Small caps' END AS \"Group\",\n       score AS \"Score\",\n       event_type AS \"Event\",\n       publisher AS \"Publisher\",\n       title AS \"Headline\",\n       url\nFROM v_signals\nWHERE published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL) AND abs(score) >= 0.6 AND is_new_info AND event_type NOT IN ('commentary')\nORDER BY published_at DESC\nLIMIT 50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Score"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Published"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Ticker"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Headline"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open article",
+                    "url": "${__data.fields.url}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Signals excluded from the study",
+      "description": "Every signal in the collection period, by the first protocol rule it fails. The analysis applies the same rules in the same order.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT CASE\n         WHEN source <> 'finnhub' THEN 'not from the registered news source'\n         WHEN NOT feed_timestamp THEN 'no source timestamp'\n         WHEN llm_model <> 'google/gemini-3.1-flash-lite' THEN 'different LLM model'\n         WHEN cap_group IS NULL THEN 'ticker no longer in the watchlist'\n         ELSE 'eligible'\n       END AS \"Reason\",\n       count(*) AS \"Signals\"\nFROM v_signals\nWHERE published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York'\nGROUP BY 1\nORDER BY 2 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Price data coverage (last 7 days)",
+      "description": "Thinly traded small caps have minutes without trades, hence fewer bars; the analysis uses the last trade at or before each moment. Zero bars = problem.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "postgres"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 35,
+        "w": 16,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "postgres"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT t.ticker AS \"Ticker\",\n       CASE t.cap_group WHEN 'large_cap' THEN 'Large caps'\n                        WHEN 'small_mid_cap' THEN 'Small caps'\n                        ELSE 'Benchmark' END AS \"Group\",\n       count(b.ts) AS \"1-min bars\",\n       max(b.ts) AS \"Latest bar\"\nFROM (SELECT ticker, cap_group FROM tickers\n      UNION ALL SELECT 'SPY', 'benchmark') t\nLEFT JOIN price_bars b ON b.ticker = t.ticker AND b.ts >= now() - interval '7 days'\nGROUP BY t.ticker, t.cap_group\nORDER BY count(b.ts), t.ticker"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Latest bar"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}

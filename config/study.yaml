@@ -16,6 +16,8 @@ data:
   collection_start: 2026-09-28        # first market day with the final 40-ticker watchlist
   watchlist: config/watchlist.yaml    # 10 large caps + 30 small caps (seed 20260926)
   news_source: finnhub                # RSS items are excluded from the analysis
+  # The RSS producer is switched off from collection_start (compose profile "rss"), so every
+  # LLM batch in the collection period holds Finnhub news only. Decided on 2026-09-27.
   llm_model: google/gemini-3.1-flash-lite   # one model for the whole collection
   benchmark: SPY
   price_feed: sip                     # 1-minute bars from Alpaca

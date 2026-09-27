@@ -229,9 +229,11 @@ def test_stopping_rule_counts_only_the_collection_period():
     signals = pd.DataFrame(
         {
             "published_at": pd.to_datetime(
-                ["2026-09-25 15:00", "2026-09-28 13:00", "2026-09-29 15:00"], utc=True
+                # 02:00 UTC on the 28th is still the 27th in New York: not counted.
+                ["2026-09-25 15:00", "2026-09-28 02:00", "2026-09-28 13:00", "2026-09-29 15:00"],
+                utc=True,
             ),
-            "cap_group": ["small_mid_cap", "small_mid_cap", "large_cap"],
+            "cap_group": ["small_mid_cap", "small_mid_cap", "small_mid_cap", "large_cap"],
         }
     )
     assert collection_counts(signals, p) == {"large_cap": 1, "small_mid_cap": 1}
