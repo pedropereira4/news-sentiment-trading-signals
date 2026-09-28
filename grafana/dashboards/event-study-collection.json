@@ -356,7 +356,7 @@
       "options": {
         "legend": {
           "displayMode": "list",
-          "placement": "top"
+          "placement": "bottom"
         }
       }
     },
@@ -436,7 +436,7 @@
       "options": {
         "legend": {
           "displayMode": "list",
-          "placement": "top"
+          "placement": "bottom"
         }
       }
     },
@@ -609,7 +609,7 @@
         "barWidth": 0.9,
         "legend": {
           "displayMode": "list",
-          "placement": "top",
+          "placement": "bottom",
           "showLegend": true
         }
       }

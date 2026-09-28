@@ -47,3 +47,11 @@ def test_news_dashboard_json_is_up_to_date():
     assert json.loads(committed.read_text(encoding="utf-8")) == builder.build(), (
         "run: python scripts/build_dashboard.py"
     )
+
+
+def test_legends_use_a_placement_grafana_supports():
+    """Grafana only lays out legends at the bottom or right; "top" leaves the plot blank."""
+    for f in (ROOT / "grafana" / "dashboards").glob("*.json"):
+        for p in json.loads(f.read_text(encoding="utf-8"))["panels"]:
+            legend = p.get("options", {}).get("legend", {})
+            assert legend.get("placement", "bottom") in {"bottom", "right"}, (f.name, p["title"])

@@ -20,7 +20,7 @@ and a pre-registered event study that tests them against market prices.
 | **Engineering** | Kafka streaming, validated LLM output, idempotent sinks, PostgreSQL system of record, dashboards as code, CI with unit, known-answer and real-Postgres tests |
 | **Status** | Collecting data from 2026-09-28 until 300 small-cap signals or 2026-10-30. [Results](#results) will be published whatever they show. |
 
-![Event study data collection dashboard](docs/img/dashboard-collection.png)
+![Real-time news sentiment dashboard (company news, last 2 days)](docs/img/dashboard-news.png)
 
 ---
 
@@ -275,13 +275,13 @@ the registered protocol so it counts exactly what the analysis will use:
 - Latest strong signals with links, signals excluded by protocol rule, price coverage per ticker
 - **No returns anywhere**: a test fails if the dashboard ever reads `event_returns`
 
+![Event study data collection dashboard](docs/img/dashboard-collection.png)
+
 **Real-time news sentiment** (InfluxDB, home dashboard). The live view of the stream:
 
 - Articles analysed, average sentiment, negative share, LLM latency
 - Sentiment trend per source, distribution and hourly volume by sentiment
 - Top topics, per-topic sentiment, latest headlines with links
-
-![Real-time news sentiment dashboard](docs/img/dashboard-news.png)
 
 ---
 
