@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -49,6 +49,12 @@ class Sql:
         self.start = f"TIMESTAMPTZ '{p.data.collection_start} 00:00 America/New_York'"
         self.end_date = f"DATE '{p.stopping_rule.max_end_date}'"
         self.target = p.stopping_rule.min_small_cap_signals
+        # Once the collection is closed, only the frozen sample counts.
+        self.end = (
+            f"TIMESTAMPTZ '{p.closing.collection_end + timedelta(days=1)} 00:00 America/New_York'"
+            if p.closing
+            else None
+        )
         self._p = p
         rule = p.analysis.strong_signal
         self.strong_text = (
@@ -72,7 +78,10 @@ class Sql:
 
     def collected(self, a: str = "") -> str:
         """Signals that count for the study: eligible and inside the collection period."""
-        return f"{a}published_at >= {self.start} AND {self.eligible(a)}"
+        period = f"{a}published_at >= {self.start}"
+        if self.end:
+            period += f" AND {a}published_at < {self.end}"
+        return f"{period} AND {self.eligible(a)}"
 
     def strong(self, a: str = "") -> str:
         rule = self._p.analysis.strong_signal

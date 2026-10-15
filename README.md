@@ -18,7 +18,7 @@ and a pre-registered event study that tests them against market prices.
 | **Data** | Finnhub company news for 40 US stocks, classified by an LLM (Gemini via OpenRouter) into one signal per company; 1-minute prices from Alpaca (SIP) |
 | **Method** | Market-adjusted event study at 5 min, 1 h, 1 day and 5 days; protocol, stopping rule and primary test [registered before any result](config/study.yaml) |
 | **Engineering** | Kafka streaming, validated LLM output, idempotent sinks, PostgreSQL system of record, dashboards as code, CI with unit, known-answer and real-Postgres tests |
-| **Status** | Collecting data from 2026-09-28 until 300 small-cap signals or 2026-10-30. [Results](#results) will be published whatever they show. |
+| **Status** | Stopping rule met on 2026-10-15 (339 small-cap signals in 14 market days). The registered analysis runs on 2026-10-23, once every return window has closed. [Results](#results) will be published whatever they show. |
 
 ![Real-time news sentiment dashboard (company news, last 2 days)](docs/img/dashboard-news.png)
 
@@ -47,9 +47,11 @@ It runs 24/7 on a laptop for a few dollars a month of LLM usage (~$0.0002 per ne
 
 ## Results
 
-> **Collection in progress.** The registered analysis runs once, when the stopping rule is
-> met (300 small-cap signals or 2026-10-30). This section will then hold the report and chart
-> from `sp-event-study`, including null results.
+> **Collection closed, analysis pending.** The stopping rule was met on 2026-10-15 (339
+> small-cap signals, collection from 2026-09-28). The sample is frozen at signals published up
+> to that day ([`closing`](config/study.yaml)), and the analysis runs once, on 2026-10-23,
+> when the 5-day windows of the last signals have closed. This section will then hold the
+> report and chart from `sp-event-study`, including null results.
 
 | | Large caps | Small caps (S&P 600 sample) |
 |---|---|---|
@@ -428,7 +430,7 @@ The analysis runs on demand from the host. It reads PostgreSQL on `localhost:$PO
 ```bash
 pip install -e ".[analysis]"
 sp-event-study --status   # progress towards the stopping rule; computes no returns
-sp-event-study --pilot    # same code on all data so far, labelled PILOT (checks, not results)
+sp-event-study --pilot    # same code on data from BEFORE the collection only (a check, never a peek)
 sp-event-study            # the registered analysis -> reports/event_study_<date>.md + chart
 ```
 

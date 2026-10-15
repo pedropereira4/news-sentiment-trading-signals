@@ -55,6 +55,14 @@ class StoppingRule(BaseModel):
     max_end_date: date
 
 
+class Closing(BaseModel):
+    """Recorded when the stopping rule is met, before any result is computed."""
+
+    rule_met_by: date
+    collection_end: date  # last New York calendar day of signals in the analysis
+    analysis_not_before: date  # once the longest window of the last signals has closed
+
+
 class Analysis(BaseModel):
     horizons: list[Horizon]
     primary_horizon: str
@@ -73,6 +81,7 @@ class Protocol(BaseModel):
     stopping_rule: StoppingRule
     analysis: Analysis
     amendments: list = Field(default_factory=list)
+    closing: Closing | None = None
 
     @property
     def primary(self) -> Horizon:

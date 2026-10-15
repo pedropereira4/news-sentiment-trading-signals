@@ -47,3 +47,11 @@ amendments:
       On simulated data with 7 trading days, day-clustered standard errors came out ~7x
       smaller than plain OLS, which would produce false positives. Decided before the
       collection start; no real results had been computed.
+
+# Recorded when the stopping rule was met, BEFORE any return of the collection period was
+# computed. Signals published after collection_end are not analysed. The analysis waits until
+# the 5-day windows of the last signals have closed, so that no horizon is left 'pending'.
+closing:
+  rule_met_by: 2026-10-15             # confirmed on this date: 339 small-cap signals (>= 300)
+  collection_end: 2026-10-15
+  analysis_not_before: 2026-10-23     # 5 trading days after collection_end, plus one day

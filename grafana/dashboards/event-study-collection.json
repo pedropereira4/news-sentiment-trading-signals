@@ -44,7 +44,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT count(*) AS \"Small-cap signals\"\nFROM v_signals\nWHERE cap_group = 'small_mid_cap' AND published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)"
+          "rawSql": "SELECT count(*) AS \"Small-cap signals\"\nFROM v_signals\nWHERE cap_group = 'small_mid_cap' AND published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND published_at < TIMESTAMPTZ '2026-10-16 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)"
         }
       ],
       "fieldConfig": {
@@ -99,7 +99,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT count(*) FROM v_signals WHERE cap_group = 'large_cap' AND published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)"
+          "rawSql": "SELECT count(*) FROM v_signals WHERE cap_group = 'large_cap' AND published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND published_at < TIMESTAMPTZ '2026-10-16 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)"
         }
       ],
       "fieldConfig": {
@@ -465,7 +465,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT t.ticker AS \"Ticker\",\n       CASE t.cap_group WHEN 'large_cap' THEN 'Large caps' WHEN 'small_mid_cap' THEN 'Small caps' END AS \"Group\",\n       t.sector AS \"Sector\",\n       count(v.ticker) AS \"Signals\",\n       count(v.ticker) FILTER (WHERE abs(v.score) >= 0.6 AND v.is_new_info AND v.event_type NOT IN ('commentary')) AS \"Strong\",\n       round(avg(v.score)::numeric, 2) AS \"Mean score\",\n       max(v.published_at) AS \"Last signal\"\nFROM tickers t\nLEFT JOIN v_signals v\n  ON v.ticker = t.ticker AND v.published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (v.source <> 'finnhub') AND NOT (NOT v.feed_timestamp) AND NOT (v.llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (v.cap_group IS NULL)\nGROUP BY t.ticker, t.cap_group, t.sector\nORDER BY t.cap_group DESC, count(v.ticker) DESC, t.ticker"
+          "rawSql": "SELECT t.ticker AS \"Ticker\",\n       CASE t.cap_group WHEN 'large_cap' THEN 'Large caps' WHEN 'small_mid_cap' THEN 'Small caps' END AS \"Group\",\n       t.sector AS \"Sector\",\n       count(v.ticker) AS \"Signals\",\n       count(v.ticker) FILTER (WHERE abs(v.score) >= 0.6 AND v.is_new_info AND v.event_type NOT IN ('commentary')) AS \"Strong\",\n       round(avg(v.score)::numeric, 2) AS \"Mean score\",\n       max(v.published_at) AS \"Last signal\"\nFROM tickers t\nLEFT JOIN v_signals v\n  ON v.ticker = t.ticker AND v.published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND v.published_at < TIMESTAMPTZ '2026-10-16 00:00 America/New_York' AND NOT (v.source <> 'finnhub') AND NOT (NOT v.feed_timestamp) AND NOT (v.llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (v.cap_group IS NULL)\nGROUP BY t.ticker, t.cap_group, t.sector\nORDER BY t.cap_group DESC, count(v.ticker) DESC, t.ticker"
         }
       ],
       "fieldConfig": {
@@ -561,7 +561,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT event_type AS \"Event type\",\n       count(*) FILTER (WHERE cap_group = 'large_cap') AS \"Large caps\",\n       count(*) FILTER (WHERE cap_group = 'small_mid_cap') AS \"Small caps\"\nFROM v_signals\nWHERE published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)\nGROUP BY event_type\nORDER BY count(*) DESC"
+          "rawSql": "SELECT event_type AS \"Event type\",\n       count(*) FILTER (WHERE cap_group = 'large_cap') AS \"Large caps\",\n       count(*) FILTER (WHERE cap_group = 'small_mid_cap') AS \"Small caps\"\nFROM v_signals\nWHERE published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND published_at < TIMESTAMPTZ '2026-10-16 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL)\nGROUP BY event_type\nORDER BY count(*) DESC"
         }
       ],
       "fieldConfig": {
@@ -639,7 +639,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT published_at AS \"Published\",\n       ticker AS \"Ticker\",\n       CASE cap_group WHEN 'large_cap' THEN 'Large caps' WHEN 'small_mid_cap' THEN 'Small caps' END AS \"Group\",\n       score AS \"Score\",\n       event_type AS \"Event\",\n       publisher AS \"Publisher\",\n       title AS \"Headline\",\n       url\nFROM v_signals\nWHERE published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL) AND abs(score) >= 0.6 AND is_new_info AND event_type NOT IN ('commentary')\nORDER BY published_at DESC\nLIMIT 50"
+          "rawSql": "SELECT published_at AS \"Published\",\n       ticker AS \"Ticker\",\n       CASE cap_group WHEN 'large_cap' THEN 'Large caps' WHEN 'small_mid_cap' THEN 'Small caps' END AS \"Group\",\n       score AS \"Score\",\n       event_type AS \"Event\",\n       publisher AS \"Publisher\",\n       title AS \"Headline\",\n       url\nFROM v_signals\nWHERE published_at >= TIMESTAMPTZ '2026-09-28 00:00 America/New_York' AND published_at < TIMESTAMPTZ '2026-10-16 00:00 America/New_York' AND NOT (source <> 'finnhub') AND NOT (NOT feed_timestamp) AND NOT (llm_model <> 'google/gemini-3.1-flash-lite') AND NOT (cap_group IS NULL) AND abs(score) >= 0.6 AND is_new_info AND event_type NOT IN ('commentary')\nORDER BY published_at DESC\nLIMIT 50"
         }
       ],
       "fieldConfig": {

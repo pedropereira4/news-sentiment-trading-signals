@@ -1,8 +1,8 @@
 """sp-event-study: run the registered event study, or check progress without looking.
 
 sp-event-study --status     # how far the stopping rule is (no returns are computed)
-sp-event-study              # the registered analysis (data from collection_start)
-sp-event-study --pilot      # same code on ALL data, labelled as a pilot
+sp-event-study              # the registered analysis (collection_start .. closing.collection_end)
+sp-event-study --pilot      # same code on data from BEFORE collection_start only (no peeking)
 """
 
 from __future__ import annotations
@@ -57,10 +57,39 @@ def collection_counts(signals: pd.DataFrame, protocol: Protocol) -> dict[str, in
     return {g: int(counted.get(g, 0)) for g in out}
 
 
+def analysis_window(protocol: Protocol, today: date, pilot: bool) -> tuple[date | None, date]:
+    """Signal dates (New York days, inclusive) a run may read.
+
+    A pilot only sees data from before the collection started, so it can never show results
+    of the study itself. The registered run reads the collection period, up to the recorded
+    collection end once the stopping rule has been met.
+    """
+    start = protocol.data.collection_start
+    if pilot:
+        return None, start - timedelta(days=1)
+    until = min(today, protocol.stopping_rule.max_end_date)
+    if protocol.closing:
+        until = min(until, protocol.closing.collection_end)
+    return start, until
+
+
+def not_ready_reason(protocol: Protocol, today: date) -> str | None:
+    """Why the registered analysis must not run yet, if it must not."""
+    closing = protocol.closing
+    if closing and today < closing.analysis_not_before:
+        return (
+            f"The registered analysis runs from {closing.analysis_not_before}, when the "
+            "longest return window of the last signals has closed. Use --status until then."
+        )
+    return None
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--status", action="store_true", help="progress only, no results")
-    parser.add_argument("--pilot", action="store_true", help="use all data, labelled as pilot")
+    parser.add_argument(
+        "--pilot", action="store_true", help="data from before collection_start only (a check)"
+    )
     parser.add_argument("--study", default="config/study.yaml")
     parser.add_argument("--out", default="reports")
     parser.add_argument(
@@ -72,8 +101,7 @@ def main(argv: list[str] | None = None) -> None:
     setup_logging(settings.log_level)
     protocol = load_protocol(args.study)
     today = args.as_of or datetime.now(UTC).date()
-    until = min(today, protocol.stopping_rule.max_end_date)
-    since = None if args.pilot else protocol.data.collection_start
+    since, until = analysis_window(protocol, today, args.pilot)
 
     conn = connect(settings.postgres_conninfo)
     ensure_schema(conn)
@@ -87,7 +115,15 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Large-cap signals: {counts['large_cap']}")
         if not reached:
             print("Keep collecting. (--status never computes returns, so it is safe to run.)")
+        elif protocol.closing:
+            c = protocol.closing
+            print(f"Collection closed: signals up to {c.collection_end} (New York days).")
+            print(f"Registered analysis: from {c.analysis_not_before}, with `sp-event-study`.")
+        else:
+            print("Stopping rule met: record `closing` in study.yaml before running the analysis.")
         return
+    if not args.pilot and (reason := not_ready_reason(protocol, today)):
+        raise SystemExit(reason)
     if not reached and not args.pilot:
         log.warning("Stopping rule not reached yet (%s): results are interim.", stopping)
     if signals.empty:

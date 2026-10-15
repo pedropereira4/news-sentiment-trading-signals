@@ -238,3 +238,25 @@ def test_stopping_rule_counts_only_the_collection_period():
     )
     assert collection_counts(signals, p) == {"large_cap": 1, "small_mid_cap": 1}
     assert collection_counts(signals.iloc[0:0], p) == {"large_cap": 0, "small_mid_cap": 0}
+
+
+def test_pilot_never_reads_the_collection_period_and_the_study_stops_at_closing():
+    from datetime import date
+
+    from sentiment_pipeline.analysis.cli import analysis_window, not_ready_reason
+    from sentiment_pipeline.analysis.protocol import Closing
+
+    p = load_protocol(ROOT / "config" / "study.yaml")
+    start = p.data.collection_start
+    assert analysis_window(p, date(2026, 10, 29), pilot=True) == (None, start - timedelta(days=1))
+
+    open_study = p.model_copy(update={"closing": None})
+    assert analysis_window(open_study, date(2026, 10, 9), pilot=False) == (start, date(2026, 10, 9))
+    assert analysis_window(open_study, date(2026, 12, 1), pilot=False)[1] == date(2026, 10, 30)
+
+    closed = p.model_copy(update={"closing": Closing(
+        rule_met_by=date(2026, 10, 15), collection_end=date(2026, 10, 15),
+        analysis_not_before=date(2026, 10, 23))})  # fmt: skip
+    assert analysis_window(closed, date(2026, 10, 23), pilot=False) == (start, date(2026, 10, 15))
+    assert not_ready_reason(closed, date(2026, 10, 22)) is not None  # windows still open
+    assert not_ready_reason(closed, date(2026, 10, 23)) is None

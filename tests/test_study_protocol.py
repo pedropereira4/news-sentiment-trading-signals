@@ -33,3 +33,11 @@ def test_rss_producer_is_off_by_default_during_the_study():
     assert compose["services"]["producer"].get("profiles") == ["rss"]
     assert "profiles" not in compose["services"]["finnhub-producer"]
     assert PROTOCOL["data"]["news_source"] == "finnhub"
+
+
+def test_closing_record_is_consistent():
+    closing, stop = PROTOCOL.get("closing"), PROTOCOL["stopping_rule"]
+    if closing:
+        assert PROTOCOL["data"]["collection_start"] <= closing["collection_end"]
+        assert closing["collection_end"] <= stop["max_end_date"]
+        assert closing["analysis_not_before"] > closing["collection_end"]
