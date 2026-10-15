@@ -13,3 +13,5 @@ dist/
 state/
 # Pilot event-study runs are checks, not results
 reports/*_pilot.*
+# Evaluation sample holds article text; only ids and labels are committed
+eval/sample.csv

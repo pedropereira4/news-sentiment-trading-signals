@@ -62,6 +62,13 @@ It runs 24/7 on a laptop for a few dollars a month of LLM usage (~$0.0002 per ne
 **Primary test** (score × small-cap interaction, 1-day abnormal return, bps per unit of
 score): –
 
+### How good are the LLM's labels?
+
+> **In progress.** 200 signals from the study (100 large caps, 100 small caps, random) are
+> being labelled blind by hand, before any return is seen, and compared with Gemini and
+> with FinBERT as a baseline: accuracy, Cohen's κ and macro-F1 with bootstrap intervals,
+> plus how often the LLM attaches a story to the wrong company. Plan: [`eval/`](eval/README.md).
+
 ---
 
 ## Architecture
@@ -451,6 +458,18 @@ method. Details that keep it honest:
 - **Known-answer tests:** synthetic prices with a planted effect (e.g. +40 bps per unit of
   score for small caps) must be recovered, inside the reported confidence interval.
 
+### Evaluating the LLM labels
+
+```bash
+sp-eval sample            # 100 + 100 random study signals (seed 20261015) -> eval/sample.csv
+sp-eval label             # blind labelling in the terminal; resumable
+pip install -e ".[eval]"  # FinBERT baseline (transformers + torch, CPU)
+sp-eval score --finbert   # -> reports/llm_eval.md + confusion matrices
+```
+
+The labelling screen shows the company, headline and summary only, never the model's label or
+any price, so the human labels cannot drift towards the model or towards hindsight.
+
 ---
 
 ## Project structure
@@ -480,6 +499,7 @@ method. Details that keep it honest:
 │   │   ├── data.py             # protocol filters, exclusions, results table
 │   │   ├── report.py           # markdown report + chart
 │   │   └── cli.py              # sp-event-study (--status / --pilot)
+│   ├── evaluation/             # sp-eval: blind human labels vs Gemini and FinBERT
 │   ├── market/
 │   │   ├── alpaca.py           # bars client: pagination, retries, sip -> iex fallback
 │   │   └── price_ingestor.py   # incremental 1-min bars -> price_bars
@@ -498,7 +518,8 @@ method. Details that keep it honest:
 ├── scripts/build_watchlist.py  # rule-based small-cap sample (seeded)
 ├── data/                       # S&P SmallCap 600 constituent snapshot
 ├── docs/img/                    # dashboard screenshots
-├── reports/                    # event-study reports (pilot runs are git-ignored)
+├── eval/                       # LLM evaluation plan, human labels, FinBERT labels
+├── reports/                    # event-study and LLM-evaluation reports (pilots git-ignored)
 ├── tests/                      # unit, known-answer and Postgres integration tests
 └── .github/workflows/ci.yml    # lint, tests, compose validation
 ```
@@ -528,9 +549,8 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:29092 OLLAMA_BASE_URL=http://localhost:11434 s
 
 ## Roadmap
 
-- [ ] Publish the registered event-study results (after 2026-10-30)
+- [ ] Publish the registered event-study results (analysis on 2026-10-23)
 - [ ] Signal engine: strong signals -> Alpaca paper-trading orders with position limits
-- [ ] Evaluation set: compare LLM labels against a human-labelled sample (accuracy / Cohen's κ) and against FinBERT as a baseline
 - [ ] Structured outputs / tool calling instead of prompt-enforced JSON
 - [ ] Schema Registry (Avro/Protobuf) instead of JSON
 - [ ] Prometheus metrics (consumer lag, LLM tokens & cost) and Grafana alerts on sentiment spikes

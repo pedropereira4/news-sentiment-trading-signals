@@ -159,3 +159,31 @@ def test_dashboard_queries_run_and_count_what_the_analysis_counts(conn):
     assert len(per_ticker) == 40  # every watchlist ticker, with or without signals
     coverage = {row[0]: row[1:3] for row in results["Price data coverage (last 7 days)"]}
     assert coverage["SPY"] == ("Benchmark", 1) and coverage["IRDM"] == ("Small caps", 0)
+
+
+def test_evaluation_sample_is_blind_and_limited_to_the_study(conn):
+    from sentiment_pipeline.analysis.protocol import Closing
+    from sentiment_pipeline.evaluation.sample import build_blind_sample
+
+    write_batch(
+        conn,
+        [
+            article(1, "NVDA"),
+            article(2, "IRDM"),
+            article(3, "IRDM", source="bbc_business"),  # excluded by the protocol
+            article(4, "IRDM", day=25),  # before the collection
+        ],
+    )
+    closed = PROTOCOL.model_copy(update={"closing": Closing(
+        rule_met_by=date(2026, 10, 15), collection_end=date(2026, 10, 15),
+        analysis_not_before=date(2026, 10, 23))})  # fmt: skip
+    sample = build_blind_sample(conn, closed, n_per_group=10, seed=1)
+    assert sorted(sample["article_id"]) == ["a1", "a2"]
+    assert (
+        dict(zip(sample["ticker"], sample["company"], strict=True))["IRDM"]
+        == "Iridium Communications"
+    )
+    leaked = {"sentiment", "score", "confidence", "llm_model", "llm_label"} & set(sample.columns)
+    assert not leaked
+    with pytest.raises(SystemExit):
+        build_blind_sample(conn, PROTOCOL.model_copy(update={"closing": None}), 10, 1)

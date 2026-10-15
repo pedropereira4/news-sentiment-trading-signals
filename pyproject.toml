@@ -23,6 +23,8 @@ dependencies = [
 [project.optional-dependencies]
 # The event study runs on demand from the host (sp-event-study), not in the containers.
 analysis = ["pandas>=2.2", "numpy>=1.26", "statsmodels>=0.14", "matplotlib>=3.8", "tzdata"]
+# FinBERT baseline for the LLM evaluation (sp-eval score --finbert); large download, CPU is fine.
+eval = ["transformers>=4.44", "torch>=2.3"]
 dev = [
     "pytest>=8",
     "ruff>=0.5",
@@ -41,6 +43,7 @@ sp-writer = "sentiment_pipeline.writer.influx_writer:main"
 sp-postgres-writer = "sentiment_pipeline.writer.postgres_writer:main"
 sp-price-ingestor = "sentiment_pipeline.market.price_ingestor:main"
 sp-event-study = "sentiment_pipeline.analysis.cli:main"
+sp-eval = "sentiment_pipeline.evaluation.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
