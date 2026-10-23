@@ -45,7 +45,9 @@ def draw_sample(signals: pd.DataFrame, n_per_group: int, seed: int) -> pd.DataFr
 
 
 def clean_summary(summary: str | None) -> str:
-    text = re.sub(r"<[^>]+>", "", summary or "").strip()
+    if not isinstance(summary, str):  # NULL in the database arrives as NaN in pandas
+        return ""
+    text = re.sub(r"<[^>]+>", "", summary).strip()
     return text[:SUMMARY_CHARS]
 
 

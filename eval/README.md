@@ -1,7 +1,9 @@
 # LLM label evaluation
 
 How often does the LLM's per-company label agree with a human, and how does it compare with
-FinBERT? Written before any item was labelled.
+FinBERT? Written before any item was labelled. The labelling took place after the
+aggregate event-study results were published; the tool shows no prices, so no item-level
+return was seen.
 
 **Sample.** 200 (article, company) pairs from the event study's signals (collection period,
 protocol filters): 100 large caps and 100 small caps drawn at random with seed `20261015`,

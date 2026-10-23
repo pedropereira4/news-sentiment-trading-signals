@@ -71,6 +71,7 @@ def test_small_group_is_taken_whole_when_short():
 def test_model_text_matches_what_the_llm_saw():
     assert model_text(" Beat ", "<p>Revenue up</p>") == "Beat — Revenue up"
     assert model_text("Beat", None) == "Beat"
+    assert model_text("Beat", float("nan")) == "Beat"  # NULL summary read through pandas
     assert len(model_text("T", "x" * 1000)) == len("T — ") + 280
 
 

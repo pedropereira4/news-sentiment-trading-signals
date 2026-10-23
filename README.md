@@ -18,7 +18,7 @@ and a pre-registered event study that tests them against market prices.
 | **Data** | Finnhub company news for 40 US stocks, classified by an LLM (Gemini via OpenRouter) into one signal per company; 1-minute prices from Alpaca (SIP) |
 | **Method** | Market-adjusted event study at 5 min, 1 h, 1 day and 5 days; protocol, stopping rule and primary test [registered before any result](config/study.yaml) |
 | **Engineering** | Kafka streaming, validated LLM output, idempotent sinks, PostgreSQL system of record, dashboards as code, CI with unit, known-answer and real-Postgres tests |
-| **Status** | Stopping rule met on 2026-10-15 (339 small-cap signals in 14 market days). The registered analysis runs on 2026-10-23, once every return window has closed. [Results](#results) will be published whatever they show. |
+| **Result** | No evidence that LLM sentiment predicts 1-day abnormal returns (large caps: at most ~34 bps per unit of score), and no evidence of a larger effect for small caps, where the estimate is too imprecise to conclude. [Results](#results) |
 
 ![Real-time news sentiment dashboard (company news, last 2 days)](docs/img/dashboard-news.png)
 
@@ -47,25 +47,53 @@ It runs 24/7 on a laptop for a few dollars a month of LLM usage (~$0.0002 per ne
 
 ## Results
 
-> **Collection closed, analysis pending.** The stopping rule was met on 2026-10-15 (339
-> small-cap signals, collection from 2026-09-28). The sample is frozen at signals published up
-> to that day ([`closing`](config/study.yaml)), and the analysis runs once, on 2026-10-23,
-> when the 5-day windows of the last signals have closed. This section will then hold the
-> report and chart from `sp-event-study`, including null results.
+**Answer to the registered question: no evidence.** Over 18 trading days and 10,290 signals,
+LLM news sentiment showed no relation to 1-day abnormal returns, and no sign of a larger effect
+for small caps. The small-cap estimate is too imprecise to rule out a sizeable effect either way.
 
 | | Large caps | Small caps (S&P 600 sample) |
 |---|---|---|
-| Eligible signals | – | – |
-| Mean 1-day abnormal return, strong positive signals | – | – |
-| Mean 1-day abnormal return, strong negative signals | – | – |
+| Signals analysed (2026-09-28 to 2026-10-15) | 9,930 | 360 |
+| Strong signals (positive / negative) | 481 / 84 | 36 / 8 |
+| Mean 1-day abnormal return, strong positive | −5.5 bps (−19.3 to 8.3) | −13.4 bps (−100.7 to 73.9) |
+| Mean 1-day abnormal return, strong negative | +8.6 bps (−27.9 to 45.2) | −190.5 bps (−387.1 to 6.0) |
 
-**Primary test** (score × small-cap interaction, 1-day abnormal return, bps per unit of
-score): –
+**Primary test** (registered): OLS of the 1-day abnormal return on the signal score with a
+score × small-cap interaction, conservative standard errors, t(17).
+
+| Term | Estimate, bps per unit of score | 95% CI | p |
+|---|---|---|---|
+| Score (large caps) | 10.0 | −14.2 to 34.2 | 0.40 |
+| **Score × small cap** | **−18.8** | **−126.6 to 89.1** | **0.72** |
+
+![Mean abnormal return of strong signals by horizon](reports/event_study_2026-10-23.png)
+
+What the numbers say, and what they do not:
+
+- **Large caps:** no reaction at 5 minutes or 1 hour, and none at 1 day. The interval bounds
+  the effect: at most about 34 bps of 1-day abnormal return per unit of sentiment. Plausible
+  reason: by the time a story reaches an aggregator feed, the most-watched stocks have priced it.
+- **Small caps:** the interval is wide (−127 to +89 bps). 360 signals in 18 days are not enough
+  to tell a zero effect from a sizeable one: the study is underpowered for the group the
+  hypothesis is about. Only 8 strong negative small-cap signals were observed.
+- **Thin trading is real:** a small cap traded in only 22% of the 5-minute windows after a
+  signal, which is why the protocol made 1 day the primary horizon.
+- **Exploratory, not a finding:** at 5 days, strong large-cap signals reversed (positive news
+  −45 bps, negative news +106 bps). This is a secondary horizon among 16 descriptive cells,
+  the event intervals do not account for many signals sharing the same stock and days, and a
+  single market episode can drive it. It is a hypothesis for a new pre-registered study, not
+  a result of this one.
+
+Everything is in the [full report](reports/event_study_2026-10-23.md). Collection closed by the
+registered stopping rule (300 small-cap signals): 339 when it was confirmed on 2026-10-15 and
+360 in the final sample, as news published by that day kept arriving with a delay. Every
+window had closed when the analysis ran, so nothing was left `pending`.
 
 ### How good are the LLM's labels?
 
 > **In progress.** 200 signals from the study (100 large caps, 100 small caps, random) are
-> being labelled blind by hand, before any return is seen, and compared with Gemini and
+> being labelled blind by hand (the tool never shows the model's label or any price), and
+> compared with Gemini and
 > with FinBERT as a baseline: accuracy, Cohen's κ and macro-F1 with bootstrap intervals,
 > plus how often the LLM attaches a story to the wrong company. Plan: [`eval/`](eval/README.md).
 
@@ -549,7 +577,8 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:29092 OLLAMA_BASE_URL=http://localhost:11434 s
 
 ## Roadmap
 
-- [ ] Publish the registered event-study results (analysis on 2026-10-23)
+- [x] Publish the registered event-study results
+- [ ] Pre-registered follow-up on the 5-day reversal in large caps, and a longer small-cap collection for power
 - [ ] Signal engine: strong signals -> Alpaca paper-trading orders with position limits
 - [ ] Structured outputs / tool calling instead of prompt-enforced JSON
 - [ ] Schema Registry (Avro/Protobuf) instead of JSON
