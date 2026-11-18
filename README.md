@@ -76,8 +76,9 @@ What the numbers say, and what they do not:
 - **Small caps:** the interval is wide (−127 to +89 bps). 360 signals in 18 days are not enough
   to tell a zero effect from a sizeable one: the study is underpowered for the group the
   hypothesis is about. Only 8 strong negative small-cap signals were observed.
-- **Thin trading is real:** a small cap traded in only 22% of the 5-minute windows after a
-  signal, which is why the protocol made 1 day the primary horizon.
+- **Thin trading is real:** after strong small-cap signals, the stock traded in only about a
+  quarter of the 5-minute windows (22% after positive, 50% after negative ones), which is why
+  the protocol made 1 day the primary horizon.
 - **Exploratory, not a finding:** at 5 days, strong large-cap signals reversed (positive news
   −45 bps, negative news +106 bps). This is a secondary horizon among 16 descriptive cells,
   the event intervals do not account for many signals sharing the same stock and days, and a
